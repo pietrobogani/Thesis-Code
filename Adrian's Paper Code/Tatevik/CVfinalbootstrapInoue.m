@@ -11,6 +11,11 @@ size_rvec = length(rvec);
 
 for bootrep = 1:bootMC
     z = 1/sqrt(el)*randn(P-el+1,1);
+    %if(bootrep==1)
+    %    fprintf('z:\n');
+    %    disp(z);
+    %end 
+    
     emp_cdf = (repmat(pit,1,size_rvec) <= repmat(rvec,P,1));
     
     K_star = zeros(1,size_rvec);
