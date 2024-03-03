@@ -1,0 +1,392 @@
+```{r}
+#--- MODEL IN THE PAPER
+# Yh(t) = 1/4 * (y(t) + y(t-1) + y(t-2) + y(t-3)) 
+# Z(t) <- cbind(1, NFCI(t), y(t))
+# Quantile Regression: Yh(t) ~ Z(t-4) = c(NFCI(t-4),y(t-4)) 
+
+
+#--- DATA GENERATING PROCESS
+# Yh(t) = tau/4 * (y(t) + y(t-1) + y(t-2) + y(t-3)) + noise
+# y(t)  ~ Normal(m,var)
+# noise  ~ Skewed-t(mean, sd, skewness,kurtosis)
+# skewness = ln(beta)
+# beta  ~ Unif[(0,2)]
+
+
+#------ PARAMETERS OF THE MODEL TO BE SET
+
+tau <- 1
+m <- 2.75
+var <- 3
+mean <- 0 
+sd <- 2
+h <- 4 # Other choice is h = 1
+gamma2 <- 30 #kurtosis of skew-t. It's range influences the possible values of skewness
+
+
+library(caret)
+library(sn)
+library(quantreg)
+```
+
+
+```{r}
+
+#GENERATE DATA
+
+y <-  rnorm(1004, mean = m, sd = var) # simulate GDP growth quarter by quarter
+
+Yh <- filter(y, rep(1/h, h), sides=1) * tau # moving average of the h past values
+
+beta <- runif(1, min = 0, max = 2)
+alpha <- log(beta)
+skew_prop <- c(mean=mean, sd=sd, gamma1=alpha,gamma2 = 1000) #alpha >0 => left-skewed
+skew_params  <- cp2dp(skew_prop, family="ST")
+noise <- rsn(1004, dp=skew_params1)
+
+#Yh <- Yh + noise
+hist(noise)
+hist(Yh)
+```
+
+```{r}
+Z <- cbind(1, y)
+Z <- as.matrix(Z)
+
+#CREATE TEST AND TRAINING SET  ------> Non ha senso, faccio già in-sample e out-of-sample
+
+# set.seed(123) # Setting a seed for reproducibility
+# trainIndex <- createDataPartition(Yh, p = 0.8, list = FALSE) #80% train, 20% test
+# Yh_train <- Yh[trainIndex]
+# Yh_test <- Yh[-trainIndex]
+# Z_train <- Z[trainIndex,]
+# Z_test <- Z[-trainIndex,]
+
+
+```
+
+```{r}
+
+#QUANTILE REGRESSION (CORRETTA, UGUALE AL PAPER ORIGINALE)
+QQ <- seq(0.05, 0.95, by = 0.05) #vector of quantiles I'll do quantile regression on
+jtFirstOOS <- 500 #First index for out-of-sample computations
+
+Quant_IS <- matrix(NA, nrow(Z), length(QQ))
+Quantunc_IS <- matrix(NA, nrow(Z), length(QQ))
+
+Quant_OOS <- matrix(NA, nrow(Z), length(QQ))
+Quantunc_OOS <- matrix(NA, nrow(Z), length(QQ))
+
+#IN SAMPLE
+for (jq in 1:length(QQ)) {
+  
+  #CONDITIONAL
+  QR <- rq(Yh[(h+1):length(Yh)] ~ Z[1:(length(Yh) - h),-1], tau=QQ[jq])
+  Quant_IS[(h+1):length(Yh), jq] <- as.vector(Z[1:(length(Yh) - h),] %*% coef(QR)) 
+
+  #UNCONDITIONAL
+  suppressWarnings(QRunc <- rq(Yh[(h+1):length(Yh)] ~ 1, tau=QQ[jq]))
+  Quantunc_IS[(h+1):length(Yh), jq] <- rep(coef(QRunc), nrow(Z) - h) #columns has to be equal
+  
+}
+
+
+#OUT OF SAMPLE
+for (jt in jtFirstOOS:(length(Yh)-h)) {
+    for (jq in 1:length(QQ)) {  
+      
+      #CONDITIONAL
+      QR <- rq(Yh[(h+1):jt] ~ Z[1:(jt - h),-1], tau=QQ[jq])
+      Quant_OOS[jt + h, jq] <- Z[jt, ] %*% coef(QR)
+      
+
+      #UNCONDITIONAL
+      suppressWarnings(QRunc <- rq(Yh[(h+1) : jt] ~ 1, QQ[jq]))
+      Quantunc_OOS[jt + h, jq] <- coef(QRunc)
+      
+    }
+}
+
+```
+
+```{r}
+
+# CONFORMALIZED QUANTILE REGRESSION
+
+#CREATE TEST AND CALIBRATION SETS FOR CQR WITH A 50-50 SPLIT
+length <- length(Yh[(h+1):length(Yh)])
+Z1 <- Z[1:(length/2),]
+Z2 <- Z[(length/2+1):(length(Yh)-h),]
+Yh1 <- Yh[(h+1):(length/2+h)]
+Yh2 <- Yh[(length/2+h+1):length(Yh)]
+
+CQuant_IS <- matrix(NA, nrow(Z), length(QQ))
+CQuantunc_IS <- matrix(NA, nrow(Z), length(QQ))
+Q_low <- matrix(NA, nrow(Z), length(QQ))
+Q_high <- matrix(NA, nrow(Z), length(QQ))
+
+
+#IN SAMPLE
+for (jq in 1:length(QQ)) {
+  
+  #CONDITIONAL
+  Q_low[(h+1):(h + length(Yh1)), jq] <- -Inf 
+  
+  QR <- rq(Yh1 ~ Z1[,-1], tau= QQ[jq])
+  Q_high[(h+1):(h+length(Yh2)), jq] <- as.vector(Z2 %*% coef(QR)) 
+  
+  # Initialize a vector for errors
+  E_i <- rep(NA, length(Yh2))
+  
+  # Calculate errors for each point in the test set I2
+  for (i in 1:length(E_i)) {
+    E_i[i] <- max(Q_low[h+i, jq] - Yh2[i], Yh2[i] - Q_high[h+i, jq])
+  }
+  
+  # Compute Q(QQ[jq])(E, I2) N.B 1 - ?? = QQ[jq]
+  quantile_E <- quantile(E_i, pmin(1, pmax(0, (QQ[jq]) * (1 + 1/length(Yh2)))))
+
+  CQuant_IS[(h+1):length(Yh) ,jq] <- as.vector(Z[1:(length(Yh) - h),] %*% coef(QR)) + quantile_E
+  
+  
+  
+  #UNCONDITIONAL
+  Q_low[(h+1):(h + length(Yh1)), jq] <- -Inf 
+  
+  suppressWarnings(QRunc <- rq(Yh1 ~ 1, tau= QQ[jq]))
+  Q_high[(h+1):(h+length(Yh2)), jq] <- rep(coef(QRunc), length((h+1):(h + length(Yh2))))
+  
+  # Initialize a vector for errors
+  E_i <- rep(NA, length(Yh2))
+  
+  # Calculate errors for each point in the test set I2
+  for (i in 1:length(E_i)) {
+    E_i[i] <- max(Q_low[h+i, jq] - Yh2[i], Yh2[i] - Q_high[h+i, jq])
+  }
+  
+  # Compute Q(QQ[jq])(E, I2) N.B 1 - ?? = QQ[jq]
+  quantile_E <- quantile(E_i, pmin(1, pmax(0, (QQ[jq]) * (1 + 1/length(Yh2)))))
+
+  
+  CQuantunc_IS[(h+1):length(Yh) ,jq] <- rep(coef(QRunc), length(Yh) - h) + quantile_E
+}
+
+
+
+
+#OUT OF SAMPLE
+CQuant_OOS <- matrix(NA, nrow(Z), length(QQ))
+CQuantunc_OOS <- matrix(NA, nrow(Z), length(QQ))
+
+
+for (jt in jtFirstOOS:(length(Yh)-h)) {
+  
+        full_length <- length(Yh[(h+1):jt])
+        test_length = full_length*50/100
+        Yh1 <- Yh[(h+1):(h+test_length)]
+        Yh2 <- Yh[(test_length+h+1):jt] #Yh1 and Yh2 correctly have same dimension
+        Z1 <- Z[1:test_length,]
+        Z2 <- Z[(test_length+1):(jt-h),] #Z1 and Z2 correctly have same dimension
+        
+    for (jq in 1:length(QQ)) {  
+      
+      #CONDITIONAL
+      Q_low[(h+1):(h+length(Yh1)), jq] <- -Inf 
+      QR <- rq(Yh1 ~ Z1[,-1], tau= QQ[jq])
+      Q_high[(h+1):(h+length(Yh2)), jq] <- as.vector(Z2 %*% coef(QR)) 
+  
+      # Initialize a vector for errors
+      E_i <- rep(NA, length(Yh2))
+  
+      # Calculate errors for each point in the test set I2
+      for (i in 1:length(E_i)) {
+         E_i[i] <- max(Q_low[h+i, jq] - Yh2[i], Yh2[i] - Q_high[h+i, jq])
+      }
+  
+      # Compute Q(QQ[jq])(E, I2) N.B 1 - ?? = QQ[jq]
+      quantile_E <- quantile(E_i, pmin(1, pmax(0, (QQ[jq]) * (1 + 1/length(Yh2)))))
+
+      CQuant_OOS[jt+h,jq] <- Z[jt,] %*% coef(QR) + quantile_E
+      
+      
+      
+      #UNCONDITIONAL
+      Q_low[(h+1):(h+length(Yh1)), jq] <- -Inf 
+      suppressWarnings(QRunc <- rq(Yh1 ~ 1, tau= QQ[jq]))
+      Q_high[(h+1):(h+length(Yh2)), jq] <- rep(coef(QRunc), length((h+1):(h + test_length)))
+  
+      # Initialize a vector for errors
+      E_i <- rep(NA, length(Yh2))
+  
+      # Calculate errors for each point in the test set I2
+      for (i in 1:length(E_i)) {
+        E_i[i] <- max(Q_low[h+i, jq] - Yh2[i], Yh2[i] - Q_high[h+i, jq])
+      }
+  
+      # Compute Q(QQ[jq])(E, I2) N.B 1 - ?? = QQ[jq]
+      quantile_E <- quantile(E_i, pmin(1, pmax(0, (QQ[jq]) * (1 + 1/length(Yh2)))))
+
+      CQuantunc_OOS[jt+h ,jq] <- coef(QRunc) + quantile_E
+    }
+}
+```
+
+```{r}
+#CALIBRATION OF QUANTILE REGRESSION
+
+# This function returns the cumulative probability for a given value X
+
+cumulative_prob <- function(X, quantiles, values) {
+  if (length(values[values <= X]) == 0) {
+    return(0) # If X is less than the smallest value, the cumulative probability is 0
+  }
+  
+  max_value_not_exceeding_X <- max(values[values <= X], na.rm = TRUE)
+  
+  quantile_index <- which(values == max_value_not_exceeding_X)
+  if (length(quantile_index) == 0) {
+    return(1) # If X is greater than all values, return the maximum cumulative probability
+  }
+  
+  return(quantiles[min(quantile_index)])
+}
+
+
+
+PitST_IS <- rep(NA, length(Yh))
+PitSTunc_IS <- rep(NA, length(Yh))
+PitST_OOS <- rep(NA, length(Yh))
+PitSTunc_OOS <- rep(NA, length(Yh))
+
+#IN SAMPLE, UNCONDITIONAL
+
+  qqTarg <- Quantunc_IS[nrow(Quantunc_IS), ]
+  
+  for(i in (h+1):length(Yh)) {
+     PitSTunc_IS[i] <- cumulative_prob(Yh[i], QQ,qqTarg)
+  }
+  
+
+  #IN SAMPLE, CONDITIONAL
+
+for (jt in 1:(length(Yh) - h)) {
+  
+  YhRealized <- Yh[jt + h]
+  qqTarg <- Quant_IS[jt + h, ]
+  PitST_IS[jt + h] <- cumulative_prob(YhRealized, QQ, qqTarg)
+}
+
+
+#OUT OF SAMPLE, CONDITIONAL
+  
+  for (jt in jtFirstOOS:(length(Yh)-h)){
+    
+      YhRealized <- Yh[jt + h]
+      qqTarg <- Quant_OOS[jt + h, ]
+      PitST_OOS[jt + h] <- cumulative_prob(YhRealized, QQ, qqTarg)
+      
+  }
+
+#OUT OF SAMPLE, UNCONDITIONAL
+  
+  for (jt in jtFirstOOS:(length(Yh)-h)){
+    
+      YhRealized <- Yh[jt + h]
+      qqTarg <- Quantunc_OOS[jt + h, ]
+      PitSTunc_OOS[jt + h] <- cumulative_prob(YhRealized, QQ, qqTarg)
+      
+  }
+
+
+```
+
+```{r}
+#CALIBRATION OF CONFORMAL QUANTILE REGRESSION
+
+CPitST_IS <- rep(NA, length(Yh))
+CPitSTunc_IS <- rep(NA, length(Yh))
+CPitST_OOS <- rep(NA, length(Yh))
+CPitSTunc_OOS <- rep(NA, length(Yh))
+
+#IN SAMPLE, UNCONDITIONAL
+
+  qqTarg <- CQuantunc_IS[nrow(Quantunc_IS), ]
+  
+  for(i in (h+1):length(Yh)) {
+     CPitSTunc_IS[i] <- cumulative_prob(Yh[i], QQ,qqTarg)
+  }
+  
+
+  #IN SAMPLE, CONDITIONAL
+
+for (jt in 1:(length(Yh) - h)) {
+  
+  YhRealized <- Yh[jt + h]
+  qqTarg <- CQuant_IS[jt + h, ]
+  CPitST_IS[jt + h] <- cumulative_prob(YhRealized, QQ, qqTarg)
+}
+
+
+#OUT OF SAMPLE, CONDITIONAL
+  
+  for (jt in jtFirstOOS:(length(Yh)-h)){
+    
+      YhRealized <- Yh[jt + h]
+      qqTarg <- CQuant_OOS[jt + h, ]
+      CPitST_OOS[jt + h] <- cumulative_prob(YhRealized, QQ, qqTarg)
+      
+  }
+
+#OUT OF SAMPLE, UNCONDITIONAL
+  
+  for (jt in jtFirstOOS:(length(Yh)-h)){
+    
+      YhRealized <- Yh[jt + h]
+      qqTarg <- CQuantunc_OOS[jt + h, ]
+      CPitSTunc_OOS[jt + h] <- cumulative_prob(YhRealized, QQ, qqTarg)
+      
+  }
+
+
+
+```
+
+```{r}
+PITtest_env <- new.env()
+source("PITtest.r",local = PITtest_env)
+rstestboot_env <- new.env()
+source("rstestboot.r",local = rstestboot_env)
+
+# PROBABILITY INTEGRAL TRANSFORM (PIT) FOR QUANTILE REGRESSION
+rvec <- seq(0, 1, by = 0.001)
+zST_ecdf1 <- PITtest_env$PITtest(PitST_OOS, rvec)
+
+
+# PROBABILITY INTEGRAL TRANSFORM (PIT) FOR  CONFORMAL QUANTILE REGRESSION
+
+rvec <- seq(0, 1, by = 0.001)
+CzST_ecdf1 <- PITtest_env$PITtest(CPitST_OOS, rvec)
+
+
+# Plot PIT for quantile regression vs. conformal quantile regression 
+plot(rvec, CzST_ecdf1, type = 'l', col = 'blue', xlab = 'tau', ylab = 'Empirical CDF')
+lines(rvec, zST_ecdf1, type = 'l', col = 'red')
+lines(rvec, rvec , col = 'black',lty=2)
+abline(v = QQ, col = "green", lty = 0)
+abline(h = QQ, col = "green", lty = 0)
+
+legend('bottomright', legend = c('Conformal Quantile Regression', 'Quantile regression'), cex = 0.5,fill = c('blue', 'red'))
+```
+
+
+```{r}
+quant_est_cqr <- unique(CzST_ecdf1)[2: (length(unique(CzST_ecdf1))-1)]
+quant_est_qr <- unique(zST_ecdf1)[2: (length(unique(zST_ecdf1))-1)]
+
+cat("ERROR CQR: ", sqrt(mean(quant_est_cqr-QQ)^2), "\n")
+cat("ERROR QR: ", sqrt(mean(quant_est_qr-QQ)^2), "\n")
+
+
+```
+
+
