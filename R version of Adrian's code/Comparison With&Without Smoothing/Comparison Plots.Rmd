@@ -1,0 +1,217 @@
+```{r}
+h <- 1
+
+# Load data 
+file_path <- "DataVulnerabilityAppendix.xls"
+
+# Read the file
+data <- read_excel(file_path)
+data<-data[,1:3]
+
+# Filter data for 1973Q1-2015Q4
+colnames(data)[1] <- "Time"
+data$Time <- as.Date(data$Time)
+
+
+# Subset the data
+data <- data[data$Time >= as.Date("1973-01-01") & data$Time <= as.Date("2015-10-01"), ]
+X <- data[,2:3]
+Time <- data$Time
+
+
+# Set forecast settings
+QQ <- seq(0.05, 0.95, by = 0.05)
+#QQ <- seq(0.01, 0.99, by = 0.01) #Let's try a much more fine grid 
+#QQ <- c(0.01, QQ, 0.99)
+deltaYY <- 0.1
+YY <- seq(-20, 20, by = deltaYY)
+jtFirstOOS <- which(year(data$Time) == 1993 & month(data$Time) == 1)
+indices <- which(QQ %in% c(0.05, 0.25, 0.5, 0.75, 0.95))
+jq05 <- indices[1]
+jq25 <- indices[2]
+jq50 <- indices[3]
+jq75 <- 16 #couldn't automatically translate from MATLAB, I set it manually, no idea why
+jq95 <- indices[4]
+
+# Construct average growth rates
+y <- X$A191RL1Q225SBEA
+Yh <- matrix(0, nrow=length(y), ncol=4)
+
+
+Yh <- filter(y, rep(1/h, h), sides=1) #If h = 1, y = Yh
+if (h>1){
+  Yh[1:(h-1)] <- NA
+}
+```
+
+
+```{r}
+#  LOAD DATA FOR THE CASE WITHOUT SMOOTHING
+
+filename <- paste("ResOOSNS_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+```
+
+
+
+```{r}
+#  LOAD DATA FOR THE CASE WITH SMOOTHING
+
+filename <- paste("ResOOS_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+```
+
+
+
+```{r}
+#  COMPARE IN SAMPLE AND UNCONDITIONAL. THIS IS A EASY WAY TO TEST THE GOODNESS OF MY IMPLEMENTATION OF qst, dst, and pst
+
+qqTargNS <- YQunc_ISNS[nrow(YQunc_ISNS), ]
+qqTarg <- YQunc_IS[nrow(YQunc_IS), ]
+
+densitiespNS <- PSTunc_ISNS[h+1, ]         #dst function
+densitiesp <- PSTunc_IS[h+1, ]
+plot(YY,densitiespNS, xlab = 'grid', ylab='density')
+points(YY,densitiesp, col = 'red')
+
+densitiesqNS <- QSTunc_ISNS[h+1, ]         #qst function
+densitiesq <- QSTunc_IS[h+1, ]
+plot(QQ,densitiesqNS, xlab = 'grid', ylab='empirical quantiles',)
+points(QQ,densitiesq, col = 'red')
+
+densitiescNS <- CSTunc_ISNS[h+1, ]          #pst function
+densitiesc <- CSTunc_IS[h+1, ]
+plot(YY,densitiescNS, xlab = 'grid', ylab='empirical cumulative',)
+points(YY,densitiesc, col = 'red')
+
+
+plot(Yh[(h + 1):length(Yh)],ScoreSTunc_ISNS[(h + 1):length(Yh)], xlab = 'real observations', ylab = 'density')   # dst function
+points(Yh[(h + 1):length(Yh)],ScoreSTunc_IS[(h + 1):length(Yh)], col = 'red')
+
+
+
+```
+```{r}
+#  NOW I COMPARE OUT-OF-SAMPLE FOR A RANDOM YEAR
+
+
+jt <- 100 #higher than 81 if I want to test the OOS, OTHERWISE IS FULL ON NA
+
+qqTargNS <- YQ_OOSNS[jt + h, ]
+qqTarg <- YQ_OOS[jt + h, ]
+
+densitiespNS <- PST_OOSNS[jt+h, ]         #dst function
+densitiesp <- PST_OOS[jt+h, ]
+plot(YY,densitiespNS, xlab = 'grid', ylab='density')
+points(YY, densitiesp, col = 'red')
+
+densitiesqNS <- QST_OOSNS[jt+h, ]         #qst function
+densitiesq <- QST_OOS[jt+h, ]
+plot(QQ,densitiesqNS, xlab = 'grid', ylab='empirical quantiles',)
+points(QQ,densitiesq, col = 'red')
+
+densitiescNS <- CST_OOSNS[jt+h, ]          #pst function
+densitiesc <- CST_OOS[jt+h, ]
+plot(YY,densitiescNS, xlab = 'grid', ylab='empirical cumulative',)
+points(YY,densitiesc, col = 'red')
+
+```
+
+```{r}
+# PLOT DOWNSIDE ENTROPY
+
+plot(Time, LeftEntropy_OOSNS, type = 'l', col = '#0000FF', 
+     xlab = 'Time', ylab = 'Entropy', xlim = range(Time), ylim = c(-0.2,1.1),
+     main = "Comparison of Entropies Over Time", lwd = 2)
+lines(Time, LeftEntropy_OOS, type = 'l', col = '#008000',  lwd = 2) 
+legend("topleft", 
+       legend = c("LeftEntropy_OOSNS", "LeftEntropy_OOS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+       
+
+
+
+plot(Time, LeftEntropy_ISNS, type = 'l', col = '#0000FF',
+     xlab = 'Time', ylab = 'Entropy', xlim = range(Time), ylim = c(-0.2,1.3),
+     main = "Comparison of Entropies Over Time", lwd = 2)
+lines(Time, LeftEntropy_IS, type = 'l', col = '#008000', lwd = 2) 
+legend("topleft", 
+       legend = c("LeftEntropy_ISNS", "LeftEntropy_IS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+```
+```{r}
+# PLOT OUT OF SAMPLE ACCURACY
+
+
+plot(Time, ScoreST_OOSNS, type = 'l', col = '#0000FF', 
+     xlab = 'Time', ylab = 'Accuracy', xlim = range(Time), 
+     main = "Comparison of Accuracies Over Time", lwd = 2)
+lines(Time, ScoreST_OOS, type = 'l', col = '#008000',  lwd = 2) 
+legend("topleft", 
+       legend = c("ScoreST_OOSNS", "ScoreST_OOS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+       
+
+
+
+plot(Time, ScoreST_ISNS, type = 'l', col = '#0000FF', 
+     xlab = 'Time', ylab = 'Accuracies', xlim = range(Time),
+     main = "Comparison of Accuracies Over Time", lwd = 2)
+lines(Time, ScoreST_IS, type = 'l', col = '#008000',  lwd = 2) 
+legend("topleft", 
+       legend = c("ScoreST_ISNS", "ScoreST_IS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+```
+```{r}
+PITtest_env <- new.env()
+source("PITtest.r",local = PITtest_env)
+rvec <- seq(0, 1, by = 0.001)
+if (h == 1) { #if h = 4, I will get different values using or n
+  kappa <- 1.34
+  kappaGDPonly <- 1.34
+}
+
+
+zST_ecdfNS <- PITtest_env$PITtest(PitST_OOSNS, rvec)
+zSTGDPonly_ecdfNS <- PITtest_env$PITtest(PitSTGDPonly_OOSNS, rvec)
+
+zST_ecdf <- PITtest_env$PITtest(PitST_OOS, rvec)
+zSTGDPonly_ecdf <- PITtest_env$PITtest(PitSTGDPonly_OOS, rvec)
+
+
+plot(rvec, zST_ecdfNS, type = 'l', col = 'blue', xlab = 'tau', ylab = 'Empirical CDF')
+lines(rvec, zST_ecdf, type = 'l', col = 'red')
+lines(rvec, rvec , col = 'black',lty=2)
+legend("topleft", 
+       legend = c("PITNS", "PIT"), 
+       col = c('blue', 'red'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))
+
+
+plot(rvec, zSTGDPonly_ecdfNS, type = 'l', col = 'blue', xlab = 'tau', ylab = 'Empirical CDF')
+lines(rvec, zSTGDPonly_ecdf, type = 'l', col = 'red')
+lines(rvec, rvec , col = 'black',lty=2)
+legend("topleft", 
+       legend = c("PITGDPonlyNS", "PITGDPonly"), 
+       col = c('blue', 'red'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))
+
+
+
+```
+
