@@ -1,0 +1,44 @@
+
+#--- DATA GENERATING PROCESS
+#y(t) = µ(t) + exp(h(t)/2) * ε(t)
+#h(t) = h(t−1) + η(t), η(t) ∼ N (0, σ^2(h))
+#ε(t) = u(t) − E[u(t)], with u(t) ∼ NCT (ν, δ(t)) and with E[u(t)] = c11(ν)*δ(t), if ν > 1
+#c11(v) = sqrt(0.5*ν) * Γ(0.5*(ν − 1)) / Γ( 0.5*ν)
+#δ(t) = φ*δ(t−1) + β0 + β1*NFCI(t) + ω(t), ω(t) ∼ N (0, σ^2(δ)), |φ| < 1,
+
+#MODIFICATIONS W.R.T THE ORIGINAL PAPER:
+#1) I REMOVED  THE CONDITION MEAN µ(t). ITS PARAMETERS ARE NOT SPECIFIED IN THE PAPER. ALSO IN THE APPENDIX THEY RUN A SHORTER SIMULATION WITHOUT IT
+#2) I USES NFCI INSTEAD FCI. THEY'RE SIMILAR EVEN THOUGH NOT THE SAME. I USE THE PARAMETER OF FCI INSIDE NFCI.
+#3) INITIALIZATION OF δ(0) AND h(0) IS ARBITRARY AND SET TO 0 BY ME
+#4) I USE ONLY THE UNITED STATES DATA
+
+  step <- 4 # Other choice is h = 1
+  T <- 1004 #time length
+  
+  if (step == 1)
+  {
+    sigmah <- 0.04
+    v <- 9.85
+    phi <- -0.39
+    beta0 <- -1.05
+    beta1 <- -0.85
+    sigmatheta <- 0.016
+  } else if (step == 4) {
+    
+    sigmah <- 0.069
+    v <- 19.56
+    phi <- -0.25
+    beta0 <- -1.47
+    beta1 <- 0.3
+    sigmatheta <- 0.017
+  }
+  
+  theta <- numeric(T)
+  theta[1] <- 0 #MY CHOICE
+  h <- numeric(T)
+  h[1] <- 0 #MY CHOICE
+  NFCI <- numeric(T)
+  NFCI[1] <- 0 #MY CHOICE
+  
+
+AR(1) on NFCI

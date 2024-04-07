@@ -1,4 +1,12 @@
 ```{r}
+#COMPARISON OF ORIGINAL PAPER MODEL (WITH SMOOTHING) WITH NO SMOOTHING VERSION
+library(quantreg)
+library(lubridate)
+library(pracma)
+library(readxl)
+library(sn)
+library(parallel)
+
 h <- 1
 
 # Load data 
@@ -21,7 +29,7 @@ Time <- data$Time
 
 # Set forecast settings
 QQ <- seq(0.05, 0.95, by = 0.05)
-#QQ <- seq(0.01, 0.99, by = 0.01) #Let's try a much more fine grid 
+#QQNS <- seq(0.01, 0.99, by = 0.01) #Let's try a much more fine grid 
 #QQ <- c(0.01, QQ, 0.99)
 deltaYY <- 0.1
 YY <- seq(-20, 20, by = deltaYY)
