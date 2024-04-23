@@ -19,7 +19,7 @@ train.fun=funs$train.fun
 
 
 
-x0=0.1
+x0=x
 
 
 test=dist.conformal.pred(x,y,x0,train.fun = train.fun, predict.fun = predict.fun, verbose = T)

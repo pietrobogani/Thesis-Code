@@ -25,12 +25,12 @@ library(progressr)
 
 run_simulation <- function(){
   
-  n <- 204
-  jtFirstOOS <- 80 #First index for out-of-sample computations
+  n <- 1000
+  jtFirstOOS <- 800 #First index for out-of-sample computations
   
   
+#-------------------Generate AR(2) model, this is our DGP
   
-    #----Generate AR(2)
   phi_ar2 <- c(0.5, -0.2)  # AR coefficients for AR(2)
   Y_ar2 <- numeric(2*n)
   Y_ar2[1] <- 1
@@ -51,36 +51,34 @@ run_simulation <- function(){
   
 
   
-    #QUANTILE REGRESSION (CORRETTA, UGUALE AL PAPER ORIGINALE)
+#--------------- QUANTILE REGRESSION 
   
-  QQ <- seq(0.05, 0.95, by = 0.025) #vector of quantiles I'll do quantile regression on
+  QQ <- seq(0.05, 0.95, by = 0.05) #vector of quantiles I'll do quantile regression on
   QQ <- c(0.01, QQ, 0.99)
 
   QuantAR1_OOS <- matrix(NA, nrow(data_ar2), length(QQ))
   QuantAR2_OOS <- matrix(NA, nrow(data_ar2), length(QQ))
   QuantAR3_OOS <- matrix(NA, nrow(data_ar2), length(QQ))
   
-  
-  # QUANTILE REGRESSION OUT OF SAMPLE
   for (jt in jtFirstOOS:nrow(data_ar2)) {
     for (jq in 1:length(QQ)) {  
       
       QR1 <- rq(Y[1:(jt-1)] ~ Y_lag1[1:(jt - 1)], data = data_ar2, tau=QQ[jq])
       QuantAR1_OOS[jt, jq] <- as.matrix(data_ar2[jt, - c(2,4,5) ]) %*% coef(QR1)
       
-      # QR2 <- rq(Y[1:(jt-1)] ~ Y_lag1[1:(jt - 1)] + Y_lag2[1:(jt - 1)], data = data_ar2, tau=QQ[jq])
-      # QuantAR2_OOS[jt, jq] <- as.matrix(data_ar2[jt, - c(2,5) ]) %*% coef(QR2)
-      # 
+      QR2 <- rq(Y[1:(jt-1)] ~ Y_lag1[1:(jt - 1)] + Y_lag2[1:(jt - 1)], data = data_ar2, tau=QQ[jq])
+      QuantAR2_OOS[jt, jq] <- as.matrix(data_ar2[jt, - c(2,5) ]) %*% coef(QR2)
+       
       # QR3 <- rq(Y[1:(jt-1)] ~ Y_lag1[1:(jt - 1)] + Y_lag2[1:(jt - 1)] + Y_lag3[1:(jt - 1)], data = data_ar2, tau=QQ[jq])
       # QuantAR3_OOS[jt, jq] <- as.matrix(data_ar2[jt, - 2 ]) %*% coef(QR3)
       
     }
   }
   
-  #-------------------------------------------------------------------------------------------
+
   
   
-  # CONFORMALIZED QUANTILE REGRESSION OUT OF SAMPLE
+#--------------- CONFORMALIZED QUANTILE REGRESSION
   
   CQuantAR1_OOS <- matrix(NA, nrow(data_ar2), length(QQ))
   CQuantAR2_OOS <- matrix(NA, nrow(data_ar2), length(QQ))
@@ -104,7 +102,7 @@ run_simulation <- function(){
       Q_low[1:nrow(data_ar2_2), jq] <- -Inf 
       QR <- rq(Y ~ Y_lag1, data = data_ar2_1, tau= QQ[jq])
       Q_high[1 : nrow(data_ar2_2), jq] <- as.matrix(data_ar2_2[,-c(2,4,5)]) %*% coef(QR) 
-      
+
       # Initialize a vector for errors
       E_i <- rep(NA, nrow(data_ar2_2))
       
@@ -121,29 +119,29 @@ run_simulation <- function(){
       
       
       #AR(2)
-      # Q_low[1:nrow(data_ar2_2), jq] <- -Inf 
-      # QR <- rq(Y ~ Y_lag1 + Y_lag2, data = data_ar2_1, tau= QQ[jq])
-      # Q_high[1 : nrow(data_ar2_2), jq] <- as.matrix(data_ar2_2[,-c(2,5)]) %*% coef(QR) 
-      # 
-      # # Initialize a vector for errors
-      # E_i <- rep(NA, nrow(data_ar2_2))
-      # 
-      # # Calculate errors for each point in the test set I2
-      # for (i in 1:length(E_i)) {
-      #   E_i[i] <- max(Q_low[i, jq] - data_ar2_2[i,2], data_ar2_2[i,2] - Q_high[i, jq])
-      # }
-      # 
-      # # Compute Q(QQ[jq])(E, I2) N.B 1 - ?? = QQ[jq]
-      # quantile_E <- quantile(E_i, pmin(1, pmax(0, (QQ[jq]) * (1 + 1/nrow(data_ar2_2)))))
-      # 
-      # CQuantAR2_OOS[jt,jq] <- as.matrix(data_ar2[jt, -c(2,5)]) %*% coef(QR) + quantile_E
-      # 
+       Q_low[1:nrow(data_ar2_2), jq] <- -Inf 
+       QR <- rq(Y ~ Y_lag1 + Y_lag2, data = data_ar2_1, tau= QQ[jq])
+       Q_high[1 : nrow(data_ar2_2), jq] <- as.matrix(data_ar2_2[,-c(2,5)]) %*% coef(QR) 
+
+       # Initialize a vector for errors
+       E_i <- rep(NA, nrow(data_ar2_2))
+       
+       # Calculate errors for each point in the test set I2
+       for (i in 1:length(E_i)) {
+         E_i[i] <- max(Q_low[i, jq] - data_ar2_2[i,2], data_ar2_2[i,2] - Q_high[i, jq])
+       }
+       
+       # Compute Q(QQ[jq])(E, I2) N.B 1 - ?? = QQ[jq]
+       quantile_E <- quantile(E_i, pmin(1, pmax(0, (QQ[jq]) * (1 + 1/nrow(data_ar2_2)))))
+       
+       CQuantAR2_OOS[jt,jq] <- as.matrix(data_ar2[jt, -c(2,5)]) %*% coef(QR) + quantile_E
+       
       
       #AR(3)
       # Q_low[1:nrow(data_ar2_2), jq] <- -Inf 
       # QR <- rq(Y ~ Y_lag1 + Y_lag2 + Y_lag3, data = data_ar2_1, tau= QQ[jq])
       # Q_high[1 : nrow(data_ar2_2), jq] <- as.matrix(data_ar2_2[,-2]) %*% coef(QR) 
-      # 
+      # Q_high[1 : nrow(data_ar2_2), jq] <- sort(Q_high[1 : nrow(data_ar2_2), jq])
       # # Initialize a vector for errors
       # E_i <- rep(NA, nrow(data_ar2_2))
       # 
@@ -198,11 +196,11 @@ run_simulation <- function(){
     YhRealized <- data_ar2[jt,2]
 
     PitSTAR1_OOS[jt] <- cumulative_prob(YhRealized, QQ, QuantAR1_OOS[jt, ])
-    # PitSTAR2_OOS[jt] <- cumulative_prob(YhRealized, QQ, QuantAR2_OOS[jt, ])
+    PitSTAR2_OOS[jt] <- cumulative_prob(YhRealized, QQ, QuantAR2_OOS[jt, ])
     # PitSTAR3_OOS[jt] <- cumulative_prob(YhRealized, QQ, QuantAR3_OOS[jt, ])
     
     CPitSTAR1_OOS[jt] <- cumulative_prob(YhRealized, QQ, CQuantAR1_OOS[jt, ])
-    # CPitSTAR2_OOS[jt] <- cumulative_prob(YhRealized, QQ, CQuantAR2_OOS[jt, ])
+    CPitSTAR2_OOS[jt] <- cumulative_prob(YhRealized, QQ, CQuantAR2_OOS[jt, ])
     # CPitSTAR3_OOS[jt] <- cumulative_prob(YhRealized, QQ, CQuantAR3_OOS[jt, ])
     
   }
@@ -216,7 +214,7 @@ run_simulation <- function(){
 
 
 
-n_simul <- 300
+n_simul <- 200
 seeds <- 1:n_simul # Creates a vector of seeds, one for each simulation
 
 # Setup parallel cluster
@@ -229,7 +227,7 @@ clusterEvalQ(cl, {
 
 # Run simulations in parallel
 results <- parLapply(cl, seeds, function(seed) {
-  #set.seed(seed)
+  set.seed(seed)
   run_simulation()
 })
 
@@ -287,8 +285,7 @@ for(res in results){
 
 #------------------- WILSON SCORES
 
-
-wilson_score_interval <- function(x, n, conf.level = 0.95) { #fake wilson score, è un altro
+wilson_score_interval <- function(x, n, conf.level = 0.95) {
   # x: number of successes
   # n: number of trials
   # conf.level: confidence level (e.g., 0.95 for 95% confidence interval)
@@ -296,19 +293,24 @@ wilson_score_interval <- function(x, n, conf.level = 0.95) { #fake wilson score,
   # Calculate point estimate for proportion
   p_hat <- x / n
   
-  # Calculate standard error using the normal approximation
-  se <- sqrt(p_hat * (1 - p_hat) / n)
-  
   # Find the Z value for the specified confidence level
-  alpha <- 1 - conf.level
-  z <- qnorm(1 - alpha / 2)
+  z <- qnorm(1 - (1 - conf.level) / 2)
   
-  # Calculate confidence interval
-  lower_bound <- p_hat - z * se
-  upper_bound <- p_hat + z * se
+  # Wilson score interval formula
+  factor <- z^2 / (2 * n)
+  denominator <- 1 + z^2 / n
+  center_adjustment <- z * sqrt(p_hat * (1 - p_hat) / n + z^2 / (4 * n^2))
   
-  return(c(lower = max(0, lower_bound), upper = min(1, upper_bound)))
+  lower_bound <- (p_hat + factor - center_adjustment) / denominator
+  upper_bound <- (p_hat + factor + center_adjustment) / denominator
+  
+  # Adjust bounds to ensure they remain within [0, 1]
+  lower_bound <- max(0, lower_bound)
+  upper_bound <- min(1, upper_bound)
+  
+  return(c(lower = lower_bound, upper = upper_bound))
 }
+
 
 
 is_within_ci <- function(success_rate, ci_lower, ci_upper) {
@@ -322,7 +324,7 @@ is_within_ci <- function(success_rate, ci_lower, ci_upper) {
 resultsPitST <- data.frame(Quantile = numeric(), SuccessRate = numeric(), CI_Lower = numeric(), CI_Upper = numeric())
 
 PitSTAR1_OOStot <- na.omit(PitSTAR1_OOStot)
-for (quantile in c(0.01, seq(0.05, 0.95, by = 0.025), 0.99)) {
+for (quantile in c(0.01, seq(0.05, 0.95, by = 0.05), 0.99)) {
   successes <- sum(PitSTAR1_OOStot < quantile)
   n <- length(PitSTAR1_OOStot)
   
@@ -344,14 +346,58 @@ resultsPitST$IsWithinCI <- mapply(is_within_ci, resultsPitST$Quantile, resultsPi
 # Calculate the percentage of quantiles within the CI
 percentage_within_ci <- mean(resultsPitST$IsWithinCI) * 100
 
+# Count the number of times SuccessRate is above the Quantile when IsWithinCI is FALSE
+count_above <- sum(resultsPitST$SuccessRate > resultsPitST$Quantile & !resultsPitST$IsWithinCI)
+
+# Count the number of times SuccessRate is below the Quantile when IsWithinCI is FALSE
+count_below <- sum(resultsPitST$SuccessRate < resultsPitST$Quantile & !resultsPitST$IsWithinCI)
+
 # Print the result
-print(paste("Percentage of quantiles within the confidence interval:", percentage_within_ci))
+print(paste("Percentage of quantiles within the confidence interval for QR AR(1):", percentage_within_ci))
+print(paste("Number of times SuccessRate is above the Quantile:", count_above))
+print(paste("Number of times SuccessRate is below the Quantile:", count_below))
+#--------------------------------
 
 
 
 
+resultsPitST <- data.frame(Quantile = numeric(), SuccessRate = numeric(), CI_Lower = numeric(), CI_Upper = numeric())
+
+PitSTAR2_OOStot <- na.omit(PitSTAR2_OOStot)
+for (quantile in c(0.01, seq(0.05, 0.95, by = 0.05), 0.99)) {
+  successes <- sum(PitSTAR2_OOStot < quantile)
+  n <- length(PitSTAR2_OOStot)
+  
+  # Calculate success rate
+  success_rate <- successes / n
+  
+  # Calculate Wilson score interval
+  ci <- wilson_score_interval(successes, n)
+  
+  # Add to results data frame
+  resultsPitST <- rbind(resultsPitST, data.frame(Quantile = quantile, SuccessRate = success_rate, CI_Lower = ci[1], CI_Upper = ci[2]))
+}
 
 
+
+# Apply the function to each row and add the result as a new column
+resultsPitST$IsWithinCI <- mapply(is_within_ci, resultsPitST$Quantile, resultsPitST$CI_Lower, resultsPitST$CI_Upper)
+
+# Calculate the percentage of quantiles within the CI
+percentage_within_ci <- mean(resultsPitST$IsWithinCI) * 100
+
+# Count the number of times SuccessRate is above the Quantile when IsWithinCI is FALSE
+count_above <- sum(resultsPitST$SuccessRate > resultsPitST$Quantile & !resultsPitST$IsWithinCI)
+
+# Count the number of times SuccessRate is below the Quantile when IsWithinCI is FALSE
+count_below <- sum(resultsPitST$SuccessRate < resultsPitST$Quantile & !resultsPitST$IsWithinCI)
+
+# Print the result
+print(paste("Percentage of quantiles within the confidence interval for QR AR(2):", percentage_within_ci))
+print(paste("Number of times SuccessRate is above the Quantile:", count_above))
+print(paste("Number of times SuccessRate is below the Quantile:", count_below))
+
+#------------------------------------------------
 
 
 
@@ -360,7 +406,7 @@ resultsCPitST <- data.frame(Quantile = numeric(), SuccessRate = numeric(), CI_Lo
 CPitSTAR1_OOStot <- na.omit(CPitSTAR1_OOStot)
 n <- length(CPitSTAR1_OOStot)
 
-for (quantile in c(0.01, seq(0.05, 0.95, by = 0.025), 0.99)) {
+for (quantile in c(0.01, seq(0.05, 0.95, by = 0.05), 0.99)) {
   successes <- sum(CPitSTAR1_OOStot < quantile)
   
   # Calculate success rate
@@ -380,9 +426,55 @@ resultsCPitST$IsWithinCI <- mapply(is_within_ci, resultsCPitST$Quantile, results
 # Calculate the percentage of quantiles within the CI
 percentage_within_ci <- mean(resultsCPitST$IsWithinCI) * 100
 
-# Print the result
-print(paste("Percentage of quantiles within the confidence interval:", percentage_within_ci))
+# Count the number of times SuccessRate is above the Quantile when IsWithinCI is FALSE
+count_above <- sum(resultsCPitST$SuccessRate > resultsCPitST$Quantile & !resultsCPitST$IsWithinCI)
 
+# Count the number of times SuccessRate is below the Quantile when IsWithinCI is FALSE
+count_below <- sum(resultsCPitST$SuccessRate < resultsCPitST$Quantile & !resultsCPitST$IsWithinCI)
+
+# Print the result
+print(paste("Percentage of quantiles within the confidence interval for CQR AR(1):", percentage_within_ci))
+print(paste("Number of times SuccessRate is above the Quantile:", count_above))
+print(paste("Number of times SuccessRate is below the Quantile:", count_below))
+
+#-----------------------------------------------------
+
+
+resultsCPitST <- data.frame(Quantile = numeric(), SuccessRate = numeric(), CI_Lower = numeric(), CI_Upper = numeric())
+
+CPitSTAR2_OOStot <- na.omit(CPitSTAR2_OOStot)
+n <- length(CPitSTAR2_OOStot)
+
+for (quantile in c(0.01, seq(0.05, 0.95, by = 0.05), 0.99)) {
+  successes <- sum(CPitSTAR2_OOStot < quantile)
+  
+  # Calculate success rate
+  success_rate <- successes / n
+  
+  # Calculate Wilson score interval
+  ci <- wilson_score_interval(successes, n)
+  
+  # Add to results data frame
+  resultsCPitST <- rbind(resultsCPitST, data.frame(Quantile = quantile, SuccessRate = success_rate, CI_Lower = ci[1], CI_Upper = ci[2]))
+}
+
+
+# Apply the function to each row and add the result as a new column
+resultsCPitST$IsWithinCI <- mapply(is_within_ci, resultsCPitST$Quantile, resultsCPitST$CI_Lower, resultsCPitST$CI_Upper)
+
+# Calculate the percentage of quantiles within the CI
+percentage_within_ci <- mean(resultsCPitST$IsWithinCI) * 100
+
+# Count the number of times SuccessRate is above the Quantile when IsWithinCI is FALSE
+count_above <- sum(resultsCPitST$SuccessRate > resultsCPitST$Quantile & !resultsCPitST$IsWithinCI)
+
+# Count the number of times SuccessRate is below the Quantile when IsWithinCI is FALSE
+count_below <- sum(resultsCPitST$SuccessRate < resultsCPitST$Quantile & !resultsCPitST$IsWithinCI)
+
+# Print the result
+print(paste("Percentage of quantiles within the confidence interval for CQR AR(2):", percentage_within_ci))
+print(paste("Number of times SuccessRate is above the Quantile:", count_above))
+print(paste("Number of times SuccessRate is below the Quantile:", count_below))
 
 
 
@@ -506,167 +598,42 @@ rmseAR2_qr  <- sqrt(mean((quantAR2_est_qr  - QQ)^2))
 rmseAR3_cqr  <- sqrt(mean((quantAR3_est_cqr  - QQ)^2))
 rmseAR3_qr  <- sqrt(mean((quantAR3_est_qr  - QQ)^2))
 
-
-
 # Compare RMSE and MAE
 list(RMSEAR1_cqr  = rmseAR1_cqr, RMSEAR1_qr  = rmseAR1_qr, RMSEAR2_cqr  = rmseAR2_cqr, RMSEAR2_qr  = rmseAR2_qr,RMSEAR3_cqr  = rmseAR3_cqr, RMSEAR3_qr  = rmseAR3_qr )
 
 
-#boh strano, perchè  ar2 performa peggio? da capire
-# $RMSEAR1_cqr
-# [1] 0.00162856
-# 
-# $RMSEAR1_qr
-# [1] 0.001691636
-# 
-# $RMSEAR2_cqr
-# [1] 0.002342383
-# 
-# $RMSEAR2_qr
-# [1] 0.002389173
-# 
-# $RMSEAR3_cqr
-# [1] 0.002265485
-# 
-# $RMSEAR3_qr
-# [1] 0.002310037
 
 
+#   #  T <- 204   jtFirstOOS <- 80 simul 200  
+#[1] "Percentage of quantiles within the confidence interval CQR:  23.8095238095238 " above 14, below 2 RMSE_cqr 0.01827088
+#[1] "Percentage of quantiles within the confidence interval QR:  33.3333333333333 " above 8 below 6 RMSE_qr 0.01365091
+
+#  T <- 204   jtFirstOOS <- 80 simul 500  
+#[1] "Percentage of quantiles within the confidence interval CQR: 14.2857142857143 above 15, below 3 RMSE_cqr 0.01689259
+#[1] "Percentage of quantiles within the confidence interval QR: 19.047619047619" above 9, below 8 RMSE_qr 0.01460333
+
+#  T <- 1004   jtFirstOOS <- 800 simul 200  
+# "Percentage of quantiles within the confidence interval CQR: 23.8095238095238 above 9, below 7 RMSE_cqr 0.01101005
+# "Percentage of quantiles within the confidence interval QR: 28.5714285714286  above 8, below 7 RMSE_qr 0.01379268
+
+#  T <- 1004   jtFirstOOS <- 800 simul 500  
+#[1] "Percentage of quantiles within the confidence interval CQR:  23.8095238095238 above 10, below 6 RMSE_cqr 0.008377895
+#[1] "Percentage of quantiles within the confidence interval QR: 23.8095238095238 above 11, below 5  RMSE_qr 0.01045755
+
+# T <- 2004 ,  jtFirstOOS <- 1800 #simul 200  
+#[1] "Percentage of quantiles within the confidence interval CQR: 
+#[1] "Percentage of quantiles within the confidence interval QR: 
+
+# T <- 2004 ,  jtFirstOOS <- 1800 #simul 500  
+#[1] "Percentage of quantiles within the confidence interval CQR: 
+#[1] "Percentage of quantiles within the confidence interval QR: 
+
+#T <- 3004 #time length  jtFirstOOS <- 2800 simul 200   
+#[1] "Percentage of quantiles within the confidence interval CQR: 
+#[1] "Percentage of quantiles within the confidence interval QR: 
+
+#T <- 3004 #time length  jtFirstOOS <- 2800 simul 500  
+#[1] "Percentage of quantiles within the confidence interval CQR: 4.76190476190476 above 12, below 8 RMSE_cqr 0.01146384
+#[1] "Percentage of quantiles within the confidence interval QR: 0 above 12, below 9 RMSE_qr 0.01607059
 
 
-
-# 
-# con n = 203, jsfirtOOS = 80, AR2 con Noise
-# $RMSEAR1_cqr
-# [1] 0.004873017
-# 
-# $RMSEAR1_qr
-# [1] 0.005073253
-# 
-# $RMSEAR2_cqr
-# [1] 0.008351015
-# 
-# $RMSEAR2_qr
-# [1] 0.008501118
-# 
-# $RMSEAR3_cqr
-# [1] 0.01071628
-# 
-# $RMSEAR3_qr
-# [1] 0.01087927
-
-
-
-# con n = 1003, jsfirtOOS = 800, AR2 con Noise
-# $RMSEAR1_cqr
-# [1] 0.002386377
-# 
-# $RMSEAR1_qr
-# [1] 0.002216238
-# 
-# $RMSEAR2_cqr
-# [1] 0.002396325
-# 
-# $RMSEAR2_qr
-# [1] 0.002341734
-# 
-# $RMSEAR3_cqr
-# [1] 0.002606719
-# 
-# $RMSEAR3_qr
-# [1] 0.002517025
-
-
-# con n = 2003, jsfirtOOS = 1900, AR2 con Noise
-# $RMSEAR1_cqr
-# [1] 0.003559376
-# 
-# $RMSEAR1_qr
-# [1] 0.004173655
-# 
-# $RMSEAR2_cqr
-# [1] 0.004680821
-# 
-# $RMSEAR2_qr
-# [1] 0.00579356
-# 
-# $RMSEAR3_cqr
-# [1] 0.005095289
-# 
-# $RMSEAR3_qr
-# [1] 0.005388974
-
-
-
-#  n <- 1700 jtFirstOOS <- 1200 100 simulations
-
-# $RMSEAR1_cqr
-# [1] 0.001790095
-# 
-# $RMSEAR1_qr
-# [1] 0.002025626
-
-#"Percentage of quantiles within the confidence interval QR: 76.1904761904762"
-#"Percentage of quantiles within the confidence interval CQR: 90.4761904761905"
-
-
-#  n <- 3000, jtFirstOOS <- 2500 200 simulations
-
-# $RMSEAR1_cqr
-# [1] 0.0006150698
-# 
-# $RMSEAR1_qr
-# [1] 0.0007199706
-
-#"Percentage of quantiles within the confidence interval CQR: 100"
-#"Percentage of quantiles within the confidence interval QR: 100"
-
-
-
-# n <- 200 jtFirstOOS <- 100 500 simul
-
-# $RMSEAR1_cqr
-# [1] 0.009863636
-# 
-# $RMSEAR1_qr
-# [1] 0.003810892
-
-#"Percentage of quantiles within the confidence interval CQR: 0"
-# "Percentage of quantiles within the confidence interval: 57.1428571428571"
-
-
-# n <- 200 jtFirstOOS <- 100 700 simul
-
-# $RMSEAR1_cqr
-# [1] 0.008254348
-# 
-# $RMSEAR1_qr
-# [1] 0.002961382
-
-#"Percentage of quantiles within the confidence interval CQR: 0"
-# "Percentage of quantiles within the confidence interval: 66.6"
-
-
-
-
-#n <- 1000 jtFirstOOS <- 900 300 simul
-# $RMSEAR1_cqr
-# [1] 0.001030722
-# 
-# $RMSEAR1_qr
-# [1] 0.0009203149
-
-#"Percentage of quantiles within the confidence interval CQR: 90.4761904761905"
-# "Percentage of quantiles within the confidence interval QR: 100"
-
-
-
-#n <- 600 jtFirstOOS <- 500 300 simul
-
-# $RMSEAR1_cqr
-# [1] 0.003596385
-# 
-# $RMSEAR1_qr
-# [1] 0.002505665
-#"Percentage of quantiles within the confidence interval CQR: 80.9523809523809"
-# "Percentage of quantiles within the confidence interval QR: 100"

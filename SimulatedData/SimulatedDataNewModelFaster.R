@@ -21,8 +21,8 @@ run_simulation <- function(){
 
 
   step <- 4 # Other choice is h = 1
-  T <- 1004 #time length
-  jtFirstOOS <- 800 #First index for out-of-sample computations
+  T <- 3004 #time length
+  jtFirstOOS <- 2800 #First index for out-of-sample computations
   
   
   if (step == 1)
@@ -60,7 +60,7 @@ run_simulation <- function(){
   y_real <- data$A191RL1Q225SBEA
   #------ Fit an AR(1) model to NFCI, then generate a new time series using the fitted model
   #fit <- ar(NFCI_real, order.max = 1)
-  fit <- Arima(NFCI_real, order=c(1,0,1))  
+  fit <- Arima(NFCI_real, order=c(1,0,0))  
   
   # Extract  coefficient
   ar_coefficients <- fit$coef["ar1"]  # For AR(1)
@@ -129,7 +129,7 @@ run_simulation <- function(){
   #-------------------------------------------------------------------------------------------
   
   
-  #QUANTILE REGRESSION (CORRETTA, UGUALE AL PAPER ORIGINALE)
+  #QUANTILE REGRESSION 
   
   QQ <- seq(0.05, 0.95, by = 0.05) #vector of quantiles I'll do quantile regression on
   QQ <- c(0.01, QQ, 0.99)
@@ -145,9 +145,9 @@ run_simulation <- function(){
       
       
       #FULL CONDITIONAL
-      QRfull <- rq(Yh[(step+1):jt] ~ Z[1:(jt - step),-1], tau=QQ[jq])
-      Quant_OOS[jt + step, jq] <- Z[jt, ] %*% coef(QRfull)
-      
+       # QRfull <- rq(Yh[(step+1):jt] ~ Z[1:(jt - step),-1], tau=QQ[jq])
+       # Quant_OOS[jt + step, jq] <- Z[jt, ] %*% coef(QRfull)
+       # 
       
       #CONDITIONAL, GDP ONLY
       # QR <- rq(Yh[(step+1):jt] ~ ZGDPonly[1:(jt - step),-1], tau=QQ[jq])
@@ -184,7 +184,7 @@ run_simulation <- function(){
       Q_low[(step+1):(step +length(Yh1)), jq] <- -Inf 
       QR <- rq(Yh1 ~ Z1[,-1], tau= QQ[jq])
       Q_high[(step+1):(step +length(Yh2)), jq] <- as.vector(Z2 %*% coef(QR)) 
-      
+
       # Initialize a vector for errors
       E_i <- rep(NA, length(Yh2))
       
@@ -254,9 +254,9 @@ run_simulation <- function(){
     
     YhRealized <- Yh[jt + step]
     
-    qqTarg <- Quant_OOS[jt + step, ]
-    PitST_OOS[jt + step] <- cumulative_prob(YhRealized, QQ, qqTarg)
-    
+     # qqTarg <- Quant_OOS[jt + step, ]
+     # PitST_OOS[jt + step] <- cumulative_prob(YhRealized, QQ, qqTarg)
+     # 
     # qqTargGDPonly <- QuantGDPonly_OOS[jt + step, ]
     # PitSTGDPonly_OOS[jt + step] <- cumulative_prob(YhRealized, QQ, qqTargGDPonly)
     
@@ -295,7 +295,7 @@ run_simulation <- function(){
   return (ret)
 }
 
-n_simul <- 200
+n_simul <- 500
 seeds <- 1:n_simul # Creates a vector of seeds, one for each simulation
 
 # Setup parallel cluster
@@ -357,26 +357,10 @@ for(res in results){
   
   
   
-#------------------- WILSON SCORES
+#-------------------------------------------------- WILSON SCORES
 #Posso usare anche PitST_OOStot e simili, infatti sono i valori arrotondati al quantile inferiore della cumulativa di Yh_realized
 #Se metto dentro "success" < e non <=, sono a posto
 
-
-# wilson_score_interval <- function(successes, n, confidence=0.95) {
-#   if (n == 0) {
-#     return(c(0, 0))
-#   }
-#   (p_hat + (z^2) / (2 * n) - z * sqrt((p_hat * (1 - p_hat) / n) + (z^2) / (4 * n^2))) / (1 + (z^2) / n)
-#   z <- qnorm(1 - (1 - confidence) / 2)
-#   p_hat <- successes / n
-#   denominator <- 1 + z^2 / n
-#   centre_adjusted_probability <- p_hat + z^2 / (2 * n)
-#   adjusted_standard_deviation <- sqrt((p_hat * (1 - p_hat) + z^2 / (4 * n)) / n)
-#   
-#   lower_bound <- (centre_adjusted_probability - z * adjusted_standard_deviation) / denominator
-#   upper_bound <- (centre_adjusted_probability + z * adjusted_standard_deviation) / denominator
-#   return(c(lower_bound, upper_bound))
-# }
 
 wilson_score_interval <- function(x, n, conf.level = 0.95) {
   # x: number of successes
@@ -386,26 +370,31 @@ wilson_score_interval <- function(x, n, conf.level = 0.95) {
   # Calculate point estimate for proportion
   p_hat <- x / n
   
-  # Calculate standard error using the normal approximation
-  se <- sqrt(p_hat * (1 - p_hat) / n)
-  
   # Find the Z value for the specified confidence level
-  alpha <- 1 - conf.level
-  z <- qnorm(1 - alpha / 2)
+  z <- qnorm(1 - (1 - conf.level) / 2)
   
-  # Calculate confidence interval
-  lower_bound <- p_hat - z * se
-  upper_bound <- p_hat + z * se
+  # Wilson score interval formula
+  factor <- z^2 / (2 * n)
+  denominator <- 1 + z^2 / n
+  center_adjustment <- z * sqrt(p_hat * (1 - p_hat) / n + z^2 / (4 * n^2))
   
-  return(c(lower = max(0, lower_bound), upper = min(1, upper_bound)))
+  lower_bound <- (p_hat + factor - center_adjustment) / denominator
+  upper_bound <- (p_hat + factor + center_adjustment) / denominator
+  
+  # Adjust bounds to ensure they remain within [0, 1]
+  lower_bound <- max(0, lower_bound)
+  upper_bound <- min(1, upper_bound)
+  
+  return(c(lower = lower_bound, upper = upper_bound))
 }
+
 
 is_within_ci <- function(success_rate, ci_lower, ci_upper) {
   return(success_rate >= ci_lower & success_rate <= ci_upper)
 }
 
 
-
+#--------------- FULL MODEL, QUANTILE REGRESSION
 resultsPitST <- data.frame(Quantile = numeric(), SuccessRate = numeric(), CI_Lower = numeric(), CI_Upper = numeric())
 
 PitST_OOStot <- na.omit(PitST_OOStot)
@@ -443,7 +432,7 @@ print(paste("Percentage of quantiles within the confidence interval:", percentag
 
 
 
-  
+#--------------- FULL MODEL, CONFORMAL QUANTILE REGRESSION  
 resultsCPitST <- data.frame(Quantile = numeric(), SuccessRate = numeric(), CI_Lower = numeric(), CI_Upper = numeric())
 
 CPitST_OOStot <- na.omit(CPitST_OOStot)
@@ -570,72 +559,3 @@ print(paste("Percentage of quantiles within the confidence interval:", percentag
   
   # Compare RMSE and MAE
   list(RMSE_cqr  = rmse_cqr , RMSE_qr  = rmse_qr , MAE_cqr  = mae_cqr , MAE_qr  = mae_qr )
-  
-
-  #  T <- 204   jtFirstOOS <- 80 simul 200, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 23.8095238095238 " above 14, below 2
-  #[1] "Percentage of quantiles within the confidence interval QR: 33.3333333333333 " above 8 below 6
-  
-  #  T <- 204   jtFirstOOS <- 80 simul 500, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 19.047619047619" above 14, below 3
-  #[1] "Percentage of quantiles within the confidence interval QR: 19.047619047619" above 9, below 8
-
-  #  T <- 1004   jtFirstOOS <- 800 simul 200, AR(1) on NFCI
-  # "Percentage of quantiles within the confidence interval CQR: 19.047619047619" above 9, below 8
-  # "Percentage of quantiles within the confidence interval QR: 28.5714285714286" above 8, below 7
-
-  #  T <- 1004   jtFirstOOS <- 800 simul 500, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 28.5714285714286" above 9, below 6
-  #[1] "Percentage of quantiles within the confidence interval QR:  28.5714285714286" above 10, below 5
-  
-  # T <- 2004 ,  jtFirstOOS <- 1800 #simul 200, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 19.047619047619 above 11, below 6
-  #[1] "Percentage of quantiles within the confidence interval QR: 4.76190476190476 above 12, below 8
-  
-  # T <- 2004 ,  jtFirstOOS <- 1800 #simul 500, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 19.047619047619 above 11, below 6
-  #[1] "Percentage of quantiles within the confidence interval QR: 9.52380952380952 above 11, below 8
-  
-  #T <- 3004 #time length  jtFirstOOS <- 2800 simul 200, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 9.52380952380952" above 11, below 8 RMSE_cqr 0.01435139
-  #[1] "Percentage of quantiles within the confidence interval QR: 4.76190476190476" above 11, below 9 RMSE_qr 0.01997776
-  
-  #T <- 3004 #time length  jtFirstOOS <- 2800 simul 500, AR(1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 4.76190476190476 above 12, below 8 RMSE_cqr 0.01146345
-  #[1] "Percentage of quantiles within the confidence interval QR: 0 above 12, below 9 RMSE_qr 0.01609723
-  
-  
-  
-
-  #  T <- 204   jtFirstOOS <- 80 simul 200, ARMA(1,1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR:  23.8095238095238 " above 14, below 2 RMSE_cqr 0.01827088
-  #[1] "Percentage of quantiles within the confidence interval QR:  33.3333333333333 " above 8 below 6 RMSE_qr 0.01365091
-  
-  #  T <- 204   jtFirstOOS <- 80 simul 500, ARMA(1,1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 14.2857142857143 above 15, below 3 RMSE_cqr 0.01689259
-  #[1] "Percentage of quantiles within the confidence interval QR: 19.047619047619" above 9, below 8 RMSE_qr 0.01460333
-  
-  #  T <- 1004   jtFirstOOS <- 800 simul 200, ARMA(1,1) on NFCI
-  # "Percentage of quantiles within the confidence interval CQR: 23.8095238095238 above 9, below 7 RMSE_cqr 0.01101005
-  # "Percentage of quantiles within the confidence interval QR: 28.5714285714286  above 8, below 7 RMSE_qr 0.01379268
-
-  #  T <- 1004   jtFirstOOS <- 800 simul 500, ARMA(1,1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval QR: "
-  #[1] "Percentage of quantiles within the confidence interval CQR:  "
-  
-  # T <- 2004 ,  jtFirstOOS <- 1800 #simul 200, ARMA(1,1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: "
-  #[1] "Percentage of quantiles within the confidence interval QR: "
-  
-  # T <- 2004 ,  jtFirstOOS <- 1800 #simul 500, ARMA(1,1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: "
-  #[1] "Percentage of quantiles within the confidence interval QR: "
-  
-  #T <- 3004 #time length  jtFirstOOS <- 2800 simul 200, ARMA(1,1) on NFCI (sopra fatto con AR(1,1))
-  #[1] "Percentage of quantiles within the confidence interval: 23.8095238095238" viene meno ma per 1 solo valore che è 0.19968392...
-  #[1] "Percentage of quantiles within the confidence interval: 28.5714285714286"
-  
-  #T <- 3004 #time length  jtFirstOOS <- 2800 simul 500, ARMA(1,1) on NFCI
-  #[1] "Percentage of quantiles within the confidence interval CQR: 4.76190476190476 above 12, below 8 RMSE_cqr 0.01146384
-  #[1] "Percentage of quantiles within the confidence interval QR: 0 above 12, below 9 RMSE_qr 0.01607059
-  
