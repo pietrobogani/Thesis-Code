@@ -211,8 +211,8 @@ legend("topleft",
        lwd = c(2, 2))
 
 
-plot(rvec, zSTGDPonly_ecdfNS, type = 'l', col = 'blue', xlab = 'tau', ylab = 'Empirical CDF')
-lines(rvec, zSTGDPonly_ecdf, type = 'l', col = 'red')
+plot(rvec, zSTGDPonly_ecdf, type = 'l', col = 'red', xlab = 'tau', ylab = 'Empirical CDF')
+lines(rvec, zSTGDPonly_ecdfNS, type = 'l', col = 'blue')
 lines(rvec, rvec , col = 'black',lty=2)
 legend("topleft", 
        legend = c("PITGDPonlyC", "PITGDPonly"), 
