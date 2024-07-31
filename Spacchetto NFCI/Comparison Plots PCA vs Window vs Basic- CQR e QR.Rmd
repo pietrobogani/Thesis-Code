@@ -1,0 +1,332 @@
+```{r}
+#COMPARISON OF QR VS CQR IN NFCI DIVIDED IN ITS COMPONENTS
+library(quantreg)
+library(lubridate)
+library(pracma)
+library(readxl)
+library(sn)
+library(parallel)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+h <- 1
+
+# Load data 
+file_path <- "DataVulnerabilityAppendix.xls"
+
+# Read the file
+data <- read_excel(file_path)
+data<-data[,1:3]
+
+# Filter data for 1973Q1-2015Q4
+colnames(data)[1] <- "Time"
+data$Time <- as.Date(data$Time)
+
+
+# Subset the data
+data <- data[data$Time >= as.Date("1973-01-01") & data$Time <= as.Date("2015-10-01"), ]
+X <- data[,2:3]
+Time <- data$Time
+
+
+# Set forecast settings
+#QQ <- seq(0.05, 0.95, by = 0.05)
+QQ <-  seq(0.01, 0.99, by = 0.01)
+QQC <-  seq(0.01, 0.99, by = 0.01)
+#QQ <- seq(0.01, 0.99, by = 0.01) #Let's try a much more fine grid 
+#QQ <- c(0.01, QQ, 0.99)
+deltaYY <- 0.1
+YY <- seq(-20, 20, by = deltaYY)
+jtFirstOOS <- which(year(data$Time) == 1993 & month(data$Time) == 1)
+indices <- which(QQ %in% c(0.05, 0.25, 0.5, 0.75, 0.95))
+jq05 <- indices[1]
+jq25 <- indices[2]
+jq50 <- indices[3]
+jq75 <- 16 #couldn't automatically translate from MATLAB, I set it manually, no idea why
+jq95 <- indices[4]
+
+# Construct average growth rates
+y <- X$A191RL1Q225SBEA
+Yh <- matrix(0, nrow=length(y), ncol=4)
+
+
+Yh <- stats::filter(y, rep(1/h, h), sides=1) #If h = 1, y = Yh
+if (h>1){
+  Yh[1:(h-1)] <- NA
+}
+```
+
+
+```{r}
+#  LOAD DATA Basic FOR THE CONFORMAL CASE
+
+filename <- paste("ResOOSCspacchetto_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSCbasic <- PitST_OOSC
+```
+
+```{r}
+#  LOAD DATA PCA FOR THE CONFORMAL CASE
+
+filename <- paste("ResOOSCspacchettoPCA_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSCPCA <- PitST_OOSC
+
+```
+
+
+```{r}
+#  LOAD DATA window 1 FOR FOR THE CONFORMAL CASE
+
+filename <- paste("ResOOSCspacchettowindow_diviso_1_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSCwindow1 <- PitST_OOSC
+
+
+```
+
+```{r}
+#  LOAD DATA window 2 FOR FOR THE CONFORMAL CASE
+
+filename <- paste("ResOOSCspacchettowindow_diviso_2_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSCwindow2 <- PitST_OOSC
+
+
+```
+
+
+
+```{r}
+#  LOAD DATA window 3 FOR FOR THE CONFORMAL CASE
+
+filename <- paste("ResOOSCspacchettowindow_diviso_3_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSCwindow3 <- PitST_OOSC
+
+
+```
+
+
+```{r}
+PITtest_env <- new.env()
+source("PITtest.r",local = PITtest_env)
+rvec <- seq(0.001, 1, by = 0.001)
+
+zST_ecdfC <- PITtest_env$PITtest(PitST_OOSCbasic, rvec)
+zST_OOSCPCA_ecdfC <- PITtest_env$PITtest(PitST_OOSCPCA, rvec)
+zST_OOSCwindow1_ecdfC <- PITtest_env$PITtest(PitST_OOSCwindow1, rvec)
+zST_OOSCwindow2_ecdfC <- PITtest_env$PITtest(PitST_OOSCwindow2, rvec)
+zST_OOSCwindow3_ecdfC <- PITtest_env$PITtest(PitST_OOSCwindow3, rvec)
+
+# Combine all data into one data frame
+combined_data <- data.frame(
+  tau = rvec,
+  CQR_basic = zST_ecdfC,
+  CQR_PCA = zST_OOSCPCA_ecdfC,
+  CQR_window1 = zST_OOSCwindow1_ecdfC,
+  CQR_window2 = zST_OOSCwindow2_ecdfC,
+  CQR_window3 = zST_OOSCwindow3_ecdfC
+)
+
+# Create the Line data separately
+line_data <- data.frame(tau = rvec, Line = rvec)
+
+# Reshape data for ggplot
+combined_data_long <- combined_data %>%
+  pivot_longer(cols = -tau, names_to = "Series", values_to = "Value")
+
+# Define a common theme
+custom_theme <- theme_minimal() +
+  theme(
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "top",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_line(color = "grey90")
+  )
+
+# Plot
+plot <- ggplot(combined_data_long, aes(x = tau, y = Value, color = Series, linetype = Series)) +
+  geom_line(size = 1) +
+  geom_line(data = line_data, aes(x = tau, y = Line), color = "black", linetype = "dashed", size = 1.2, show.legend = FALSE) +
+  scale_color_manual(values = c(
+    "CQR_basic" = "blue", 
+    "CQR_PCA" = "green",
+    "CQR_window1" = "purple",
+    "CQR_window2" = "orange",
+    "CQR_window3" = "brown"
+  )) +
+  scale_linetype_manual(values = c(
+    "CQR_basic" = "solid", 
+    "CQR_PCA" = "solid",
+    "CQR_window1" = "solid",
+    "CQR_window2" = "solid",
+    "CQR_window3" = "solid"
+  )) +
+  labs(x = expression(tau), y = 'Empirical CDF') +
+  custom_theme +
+  guides(color = guide_legend(title = NULL), linetype = guide_legend(title = NULL))
+
+print(plot)
+
+ggsave("CQR_all_methods.png", plot = plot, width = 8, height = 6, dpi = 300)
+
+
+
+```
+
+
+
+```{r}
+#  LOAD DATA Basic FOR THE STANDARD CASE
+
+filename <- paste("ResOOSNSspacchetto_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSNSbasic <- PitST_OOSNS
+```
+
+```{r}
+#  LOAD DATA PCA FOR THE STANDARD CASE
+
+filename <- paste("ResOOSNSspacchettoPCA_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSNSPCA <- PitST_OOSNS
+
+```
+
+
+```{r}
+#  LOAD DATA window 1 FOR FOR THE STANDARD CASE
+
+filename <- paste("ResOOSNSspacchettowindow_diviso_1_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSNSwindow1 <- PitST_OOSNS
+
+
+```
+
+```{r}
+#  LOAD DATA window 2 FOR FOR THE STANDARD CASE
+
+filename <- paste("ResOOSNSspacchettowindow_diviso_2_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSNSwindow2 <- PitST_OOSNS
+
+
+```
+
+
+
+```{r}
+#  LOAD DATA window 3 FOR FOR THE STANDARD CASE
+
+filename <- paste("ResOOSNSspacchettowindow_diviso_3_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+PitST_OOSNSwindow3 <- PitST_OOSNS
+```
+
+
+
+
+
+
+```{r}
+
+zST_ecdfNS <- PITtest_env$PITtest(PitST_OOSNSbasic, rvec)
+zST_OOSNSPCA_ecdfNS <- PITtest_env$PITtest(PitST_OOSNSPCA, rvec)
+zST_OOSNSwindow1_ecdfNS <- PITtest_env$PITtest(PitST_OOSNSwindow1, rvec)
+zST_OOSNSwindow2_ecdfNS <- PITtest_env$PITtest(PitST_OOSNSwindow2, rvec)
+zST_OOSNSwindow3_ecdfNS <- PITtest_env$PITtest(PitST_OOSNSwindow3, rvec)
+
+# Combine all data into one data frame
+combined_data <- data.frame(
+  tau = rvec,
+  QR_basic = zST_ecdfNS,
+  QR_PCA = zST_OOSNSPCA_ecdfNS,
+  QR_window1 = zST_OOSNSwindow1_ecdfNS,
+  QR_window2 = zST_OOSNSwindow2_ecdfNS,
+  QR_window3 = zST_OOSNSwindow3_ecdfNS
+)
+
+# Create the Line data separately
+line_data <- data.frame(tau = rvec, Line = rvec)
+
+# Reshape data for ggplot
+combined_data_long <- combined_data %>%
+  pivot_longer(cols = -tau, names_to = "Series", values_to = "Value")
+
+# Define a common theme
+custom_theme <- theme_minimal() +
+  theme(
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "top",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_line(color = "grey90")
+  )
+
+# Plot
+plot <- ggplot(combined_data_long, aes(x = tau, y = Value, color = Series, linetype = Series)) +
+  geom_line(size = 1) +
+  geom_line(data = line_data, aes(x = tau, y = Line), color = "black", linetype = "dashed", size = 1.2, show.legend = FALSE) +
+  scale_color_manual(values = c(
+    "QR_basic" = "blue", 
+    "QR_PCA" = "green",
+    "QR_window1" = "purple",
+    "QR_window2" = "orange",
+    "QR_window3" = "brown"
+  )) +
+  scale_linetype_manual(values = c(
+    "QR_basic" = "solid", 
+    "QR_PCA" = "solid",
+    "QR_window1" = "solid",
+    "QR_window2" = "solid",
+    "QR_window3" = "solid"
+  )) +
+  labs(x = expression(tau), y = 'Empirical CDF') +
+  custom_theme +
+  guides(color = guide_legend(title = NULL), linetype = guide_legend(title = NULL))
+
+print(plot)
+
+
+ggsave("QR_all_metods.png", plot = plot, width = 8, height = 6, dpi = 300)
+
+
+```

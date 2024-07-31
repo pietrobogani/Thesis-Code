@@ -7,7 +7,7 @@ library(readxl)
 library(sn)
 library(parallel)
 
-h <- 4
+h <- 1
 
 # Load data 
 file_path <- "DataVulnerabilityAppendix.xls"
@@ -187,11 +187,38 @@ legend("topleft",
 ```{r}
 PITtest_env <- new.env()
 source("PITtest.r",local = PITtest_env)
+
+rstestboot_env <- new.env()
+source("rstestboot.r",local = rstestboot_env)
+
 rvec <- seq(0, 1, by = 0.001)
-if (h == 1) { #if h = 4, I will get different values using or n
+
+if (h == 1) {
   kappa <- 1.34
   kappaGDPonly <- 1.34
+  P <- sum(!is.na(PitST_OOSC)) # correct for both h = 1 and h = 4
+} else if (h == 4) {
+  # Compute bootstrapped 5% critical values
+  PITs <- cbind(PitST_OOSC, PitSTGDPonly_OOSC)
+  PITs <- PITs[(jtFirstOOS + h):nrow(PITs), , drop = FALSE]
+  
+  #testcritvalues <- matrix(NA, nrow = 1, ncol = 2, dimnames = list(NULL, c('GDP and NFCI', 'GDP only')))
+  testcritvalues <- array(NA, dim = c(2, 3, 2))
+  
+  for (i in 1:2) {
+    testcritvalues[,, i] <- round(rstestboot_env$rstestboot(PITs[, i])$critvalues[2] * 100) / 100
+  }
+  
+  kappa <- testcritvalues[1, 2, 1] #different from Matlab due to seed in CVfinalbootstrapInoue
+  kappaGDPonly <- testcritvalues[1, 2, 2] #different from Matlab due to seed in CVfinalbootstrapInoue
 }
+  # Create the data frame for the dashed lines
+  dashed_lines <- data.frame(
+    tau = rvec,
+    lower = rvec - (kappa / sqrt(P)),
+    upper = rvec + (kappa / sqrt(P))
+  )
+
 
 
 zST_ecdfNS <- PITtest_env$PITtest(PitST_OOSC, rvec)
@@ -200,27 +227,69 @@ zSTGDPonly_ecdfNS <- PITtest_env$PITtest(PitSTGDPonly_OOSC, rvec)
 zST_ecdf <- PITtest_env$PITtest(PitST_OOS, rvec)
 zSTGDPonly_ecdf <- PITtest_env$PITtest(PitSTGDPonly_OOS, rvec)
 
+data3 <- data.frame(
+  tau = rvec,
+  PITC = zST_ecdfNS,
+  PIT = zST_ecdf
+)
 
-plot(rvec, zST_ecdfNS, type = 'l', col = 'blue', xlab = 'tau', ylab = 'Empirical CDF')
-lines(rvec, zST_ecdf, type = 'l', col = 'red')
-lines(rvec, rvec , col = 'black',lty=2)
-legend("topleft", 
-       legend = c("PITC", "PIT"), 
-       col = c('blue', 'red'),
-       lty = c(1, 1),  
-       lwd = c(2, 2))
+data4 <- data.frame(
+  tau = rvec,
+  PITGDPonlyC = zSTGDPonly_ecdf,
+  PITGDPonly = zSTGDPonly_ecdfNS
+)
 
+# Create the Line data separately
+line_data <- data.frame(tau = rvec, Line = rvec)
 
-plot(rvec, zSTGDPonly_ecdf, type = 'l', col = 'red', xlab = 'tau', ylab = 'Empirical CDF')
-lines(rvec, zSTGDPonly_ecdfNS, type = 'l', col = 'blue')
-lines(rvec, rvec , col = 'black',lty=2)
-legend("topleft", 
-       legend = c("PITGDPonlyC", "PITGDPonly"), 
-       col = c('blue', 'red'),
-       lty = c(1, 1),  
-       lwd = c(2, 2))
+# Reshape data for ggplot
+data3_long <- data3 %>%
+  pivot_longer(cols = -tau, names_to = "Series", values_to = "Value")
 
+data4_long <- data4 %>%
+  pivot_longer(cols = -tau, names_to = "Series", values_to = "Value")
 
+# Define a common theme
+custom_theme <- theme_minimal() +
+  theme(
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "top",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_line(color = "grey90")
+  )
 
+# First new plot
+plot3 <- ggplot(data3_long, aes(x = tau, y = Value, color = Series, linetype = Series)) +
+  geom_line(size = 1) +
+  geom_line(data = line_data, aes(x = tau, y = Line), color = "black", linetype = "dashed", size = 1.2, show.legend = FALSE) +
+  geom_line(data = dashed_lines, aes(x = tau, y = lower), color = "black", linetype = "dashed", size = 1, show.legend = FALSE) +
+  geom_line(data = dashed_lines, aes(x = tau, y = upper), color = "black", linetype = "dashed", size = 1, show.legend = FALSE) +
+  scale_color_manual(values = c("PITC" = "blue", "PIT" = "red")) +
+  scale_linetype_manual(values = c("PITC" = "solid", "PIT" = "solid")) +
+  labs(x = expression(tau), y = 'Empirical CDF') +
+  custom_theme +
+  guides(color = guide_legend(title = NULL), linetype = guide_legend(title = NULL))
+
+plot3
+# Save the first new plot
+ggsave("plotfullh1.png", plot = plot3, width = 8, height = 6, dpi = 300)
+
+# Second new plot
+plot4 <- ggplot(data4_long, aes(x = tau, y = Value, color = Series, linetype = Series)) +
+  geom_line(size = 1) +
+  geom_line(data = line_data, aes(x = tau, y = Line), color = "black", linetype = "dashed", size = 1.2, show.legend = FALSE) +
+  geom_line(data = dashed_lines, aes(x = tau, y = lower), color = "black", linetype = "dashed", size = 1, show.legend = FALSE) +
+  geom_line(data = dashed_lines, aes(x = tau, y = upper), color = "black", linetype = "dashed", size = 1, show.legend = FALSE) +
+  scale_color_manual(values = c("PITGDPonlyC" = "blue", "PITGDPonly" = "red")) +
+  scale_linetype_manual(values = c("PITGDPonlyC" = "solid", "PITGDPonly" = "solid")) +
+  labs(x = expression(tau), y = 'Empirical CDF') +
+  custom_theme +
+  guides(color = guide_legend(title = NULL), linetype = guide_legend(title = NULL))
+
+plot4
+# Save the second new plot
+ggsave("plotgdponlyh1.png", plot = plot4, width = 8, height = 6, dpi = 300)
 ```
-
