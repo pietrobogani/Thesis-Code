@@ -93,7 +93,7 @@ qCQRF <- function(x0,y0,x1,y1,x_test,QQ) {
 }
 
 qCQR <- function(formula,x0,y0,x1,y1,x_test,QQ) {
-  
+  #N.B. 1 - alpha = QQ[jq]
   
   Q_low <- matrix(NA, nrow(x1), length(QQ))
   Q_high <- matrix(NA, nrow(x1), length(QQ))
@@ -122,6 +122,75 @@ qCQR <- function(formula,x0,y0,x1,y1,x_test,QQ) {
     #CQuant_OOS[jq] <- x_test %*% coef(QR) + quantile_E
     
     
+  }
+  
+  return(CQuant_OOS)
+  
+}
+
+qCQR_opposite <- function(formula,x0,y0,x1,y1,x_test,QQ) {
+  
+  #N.B. 1 - alpha = QQ[jq]
+  
+  Q_low <- matrix(NA, nrow(x1), length(QQ))
+  Q_high <- matrix(NA, nrow(x1), length(QQ))
+  CQuant_OOS <- matrix(0, nrow(x_test), length(QQ))
+  #CQuant_OOS <- matrix(0, length(QQ))
+  
+  for( jq in 1:length(QQ) ) {
+    
+    Q_high[, jq] <- Inf 
+    QR <- rq(formula, data = cbind(x0,Y = y0), tau=(1-QQ[jq]))    
+    
+    Q_low[1 : nrow(x1), jq] <- as.matrix(x1) %*% coef(QR) 
+    
+    # Initialize a vector for errors
+    E_i <- rep(NA, nrow(x1))
+    
+    # Calculate errors for each point in the test set I2
+    for (i in 1:length(E_i)) {
+      E_i[i] <- max(Q_low[i, jq] - y1[i], y1[i] - Q_high[i, jq])
+    }
+    
+    # Compute Q(QQ[jq])(E, I2) N.B 1 - alpha = QQ[jq]
+    quantile_E <- quantile(E_i, QQ[jq] * (1 + 1/nrow(x1)))
+    
+    CQuant_OOS[,jq] <- as.matrix(x_test) %*% coef(QR) - quantile_E
+    #CQuant_OOS[jq] <- x_test %*% coef(QR) + quantile_E
+    
+    
+  }
+  
+  return(CQuant_OOS)
+  
+}
+
+qCQRF_opposite <- function(x0,y0,x1,y1,x_test,QQ) {
+  
+  qrf_model <- quantregForest(x = x0, y = y0)
+  CQuant_OOS <- matrix(0, nrow(x_test), length(QQ))
+  Q_low <- matrix(NA, nrow(x1), length(QQ))
+  Q_high <- matrix(NA, nrow(x1), length(QQ))
+  
+  for( jq in 1:length(QQ) ) {
+    
+    Q_low[1:nrow(x1), jq] <- predict(qrf_model, newdata = x1, what = (1-QQ[jq]))
+    
+    Q_high[1 : nrow(x1), jq] <- Inf
+    
+    # Initialize a vector for errors
+    E_i <- rep(NA, nrow(x1))
+    
+    # Calculate errors for each point in the test set I2
+    for (i in 1:length(E_i)) {
+      E_i[i] <- max(Q_low[i, jq] - y1[i], y1[i] - Q_high[i, jq])
+    }
+    
+    
+    # Compute Q(QQ[jq])(E, I2) N.B 1 - alpha = QQ[jq]
+    quantile_E <- quantile(E_i, QQ[jq] * (1 + 1/nrow(x1)))
+    
+    CQuant_OOS[,jq] <- predict(qrf_model, newdata = x_test, what = (1-QQ[jq])) - quantile_E
   }
   
   return(CQuant_OOS)
@@ -336,3 +405,23 @@ remove_highly_correlated <- function(data, threshold = 0.99) {
   
   return(list(cleaned_data = cleaned_data, removed_indices = removed_indices))
 }
+
+calculate_percent_below <- function(PitST_OOSC) {
+  # Remove NA values from the vector
+  PitST_OOSC <- na.omit(PitST_OOSC)
+  
+  # Define the levels (0.01, 0.02, ..., 1)
+  levels <- seq(0.01, 1, by = 0.01)
+  
+  # Initialize a vector to store the results
+  percent_below <- numeric(length(levels))
+  
+  # Loop through each level and calculate the percentage of elements below that level
+  for (i in seq_along(levels)) {
+    level <- levels[i]
+    percent_below[i] <- mean(PitST_OOSC < level) * 100
+  }
+  
+  return(percent_below)
+}
+

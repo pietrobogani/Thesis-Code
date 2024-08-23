@@ -26,16 +26,20 @@ source("C:/Users/Pietro/Desktop/Pietro/Politecnico/Tesi/Thesis-Code/functions.R"
 
 
 file_path <- "ALLINONE_rho=1_Results.xlsx"
-# Create a new workbook
-wb <- createWorkbook()
-
-# Add a worksheet named "Data"
-addWorksheet(wb, "Data")
-
-# Save the workbook (this creates the file)
-saveWorkbook(wb, file_path, overwrite = TRUE)
-
-wb <- loadWorkbook(file_path)
+# Check if the file exists
+if (!file.exists(file_path)) {
+  # Create a new workbook
+  wb <- createWorkbook()
+  
+  # Add a worksheet named "Data"
+  addWorksheet(wb, "Data")
+  
+  # Save the workbook (this creates the file)
+  saveWorkbook(wb, file_path, overwrite = TRUE)
+} else {
+  # Load the existing workbook
+  wb <- loadWorkbook(file_path)
+}
 
 
 
@@ -43,7 +47,7 @@ wb <- loadWorkbook(file_path)
 run_simulation <- function(n, phi_ar2){
   
   #n <- 1001 #3 elements will be lost in the DGP
-  n2 <- 100
+  n2 <- 1000
   
 #------------------- Generate n + n2 points for the AR(1) model, this is our DGP
   
@@ -124,10 +128,10 @@ run_simulation <- function(n, phi_ar2){
 
 
 vector_n <- c(101,201,1001)
-vector_phi <- c(0.95, 1, 1.05)
+vector_phi <- c(0.7, 1, 1.0000001)
 
-n2 = 100
-n3 = 100 
+n2 = 1000
+n3 = 1000
 n_simul <- n3
 seeds <- 1:n_simul # Creates a vector of seeds, one for each simulation
 

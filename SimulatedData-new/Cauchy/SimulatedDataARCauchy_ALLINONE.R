@@ -24,19 +24,23 @@ library(ggplot2)
 source("C:/Users/Pietro/Desktop/Pietro/Politecnico/Tesi/Thesis-Code/functions.R")
 
 
-#file_path <- "ALLINONE_Cauchy_Results.xlsx" #for quantile regression
-file_path <- "ALLINONE_Cauchy_ResultsRForest.xlsx"
+file_path <- "ALLINONE_Cauchy_Results1000.xlsx" #for quantile regression
+#file_path <- "ALLINONE_Cauchy_ResultsRForest.xlsx"
 
-# Create a new workbook
-wb <- createWorkbook()
-
-# Add a worksheet named "Data"
-addWorksheet(wb, "Data")
-
-# Save the workbook (this creates the file)
-saveWorkbook(wb, file_path, overwrite = TRUE)
-
-wb <- loadWorkbook(file_path)
+# Check if the file exists
+if (!file.exists(file_path)) {
+  # Create a new workbook
+  wb <- createWorkbook()
+  
+  # Add a worksheet named "Data"
+  addWorksheet(wb, "Data")
+  
+  # Save the workbook (this creates the file)
+  saveWorkbook(wb, file_path, overwrite = TRUE)
+} else {
+  # Load the existing workbook
+  wb <- loadWorkbook(file_path)
+}
 
 
 
@@ -80,31 +84,32 @@ run_simulation <- function(n){
   QuantAR2_OOS <- matrix(0, n2, length(QQ))
   QuantAR3_OOS <- matrix(0, n2, length(QQ))
   
-     # for (jq in 1:length(QQ)) {  
-     #   
-     #     QR1 <- rq(Y ~ Y_lag1, data = data, tau=QQ[jq])
-     #     QuantAR1_OOS[,jq] <- as.matrix(data_test[,-c(2,4,5)]) %*% coef(QR1)
-     #     
-     #     QR2 <- rq(Y ~ Y_lag1 + Y_lag2 , data = data, tau=QQ[jq])
-     #     QuantAR2_OOS[,jq] <- as.matrix(data_test[,-c(2,5)]) %*% coef(QR2)
-     #     
-     #     QR3 <- rq(Y ~ Y_lag1 + Y_lag2 + Y_lag3, data = data, tau=QQ[jq])
-     #     QuantAR3_OOS[,jq] <- as.matrix(data_test[,-2]) %*% coef(QR3)
-     #   
-     # }
-     # 
-#--------------- QUANTILE RANDOM FOREST 
-  qrf_model1 <- quantregForest(x = as.matrix(data[, 3]), y = data[,2])
-  qrf_model2 <- quantregForest(x = as.matrix(data[, c(3,4)]), y = data[,2])
-  qrf_model3 <- quantregForest(x = as.matrix(data[, c(3,4,5)]), y = data[,2])
-  
-    for (jq in 1:length(QQ)) {  
-   
-      QuantAR1_OOS[,jq] <- predict(qrf_model1, newdata = as.matrix(data_test[,3]), what = QQ[jq])
-      QuantAR2_OOS[,jq] <- predict(qrf_model2, newdata = as.matrix(data_test[,c(3,4)]), what = QQ[jq])      
-      QuantAR3_OOS[,jq] <- predict(qrf_model3, newdata = as.matrix(data_test[,c(3,4,5)]), what = QQ[jq])
+      for (jq in 1:length(QQ)) {  
+        
+          QR1 <- rq(Y ~ Y_lag1, data = data, tau=QQ[jq])
+          QuantAR1_OOS[,jq] <- as.matrix(data_test[,-c(2,4,5)]) %*% coef(QR1)
+          
+          QR2 <- rq(Y ~ Y_lag1 + Y_lag2 , data = data, tau=QQ[jq])
+          QuantAR2_OOS[,jq] <- as.matrix(data_test[,-c(2,5)]) %*% coef(QR2)
+          
+          QR3 <- rq(Y ~ Y_lag1 + Y_lag2 + Y_lag3, data = data, tau=QQ[jq])
+          QuantAR3_OOS[,jq] <- as.matrix(data_test[,-2]) %*% coef(QR3)
+        
+      }
       
- }
+#--------------- QUANTILE RANDOM FOREST 
+  
+ #  qrf_model1 <- quantregForest(x = as.matrix(data[, 3]), y = data[,2])
+ #  qrf_model2 <- quantregForest(x = as.matrix(data[, c(3,4)]), y = data[,2])
+ #  qrf_model3 <- quantregForest(x = as.matrix(data[, c(3,4,5)]), y = data[,2])
+ #  
+ #    for (jq in 1:length(QQ)) {  
+ #   
+ #      QuantAR1_OOS[,jq] <- predict(qrf_model1, newdata = as.matrix(data_test[,3]), what = QQ[jq])
+ #      QuantAR2_OOS[,jq] <- predict(qrf_model2, newdata = as.matrix(data_test[,c(3,4)]), what = QQ[jq])      
+ #      QuantAR3_OOS[,jq] <- predict(qrf_model3, newdata = as.matrix(data_test[,c(3,4,5)]), what = QQ[jq])
+ #      
+ # }
 #--------------- CONFORMALIZED QUANTILE REGRESSION
   
   full_length <- nrow(data)
@@ -113,15 +118,46 @@ run_simulation <- function(n){
   data_2 <- data[(test_length + 1) : full_length,] #calibration
 
   
+   #AR1
+   x0 <- data_1[,-c(2,4,5)]
+   y0 <- data_1[,2]
+   x1 <- data_2[,-c(2,4,5)]
+   y1 <- data_2[,2]
+   x_test <- data_test[,-c(2,4,5)]
+   formula <- make_formula(1, 0)
+   
+   CQuantAR1_OOS <- qCQR(formula,x0,y0,x1,y1,x_test,QQ)
+   
+   #AR2
+   x0 <- data_1[,-c(2,5)]
+   y0 <- data_1[,2]
+   x1 <- data_2[,-c(2,5)]
+   y1 <- data_2[,2]
+   x_test <- data_test[,-c(2,5)]
+   formula <- make_formula(2, 0)
+   
+   CQuantAR2_OOS <- qCQR(formula,x0,y0,x1,y1,x_test,QQ)
+   
+   #AR2
+   x0 <- data_1[,-2]
+   y0 <- data_1[,2]
+   x1 <- data_2[,-2]
+   y1 <- data_2[,2]
+   x_test <- data_test[,-2]
+   formula <- make_formula(3, 0)
+   
+   CQuantAR3_OOS <- qCQR(formula,x0,y0,x1,y1,x_test,QQ)
+  
+  #--------------- CONFORMAL QUANTILE RANDOM FOREST
+  
   # #AR1
   # x0 <- data_1[,-c(2,4,5)]
   # y0 <- data_1[,2]
   # x1 <- data_2[,-c(2,4,5)]
   # y1 <- data_2[,2]
   # x_test <- data_test[,-c(2,4,5)]
-  # formula <- make_formula(1, 0)
   # 
-  # CQuantAR1_OOS <- qCQR(formula,x0,y0,x1,y1,x_test,QQ)
+  # CQuantAR1_OOS <- qCQRF(x0,y0,x1,y1,x_test,QQ)
   # 
   # #AR2
   # x0 <- data_1[,-c(2,5)]
@@ -129,9 +165,8 @@ run_simulation <- function(n){
   # x1 <- data_2[,-c(2,5)]
   # y1 <- data_2[,2]
   # x_test <- data_test[,-c(2,5)]
-  # formula <- make_formula(2, 0)
   # 
-  # CQuantAR2_OOS <- qCQR(formula,x0,y0,x1,y1,x_test,QQ)
+  # CQuantAR2_OOS <- qCQRF(x0,y0,x1,y1,x_test,QQ)
   # 
   # #AR2
   # x0 <- data_1[,-2]
@@ -139,40 +174,10 @@ run_simulation <- function(n){
   # x1 <- data_2[,-2]
   # y1 <- data_2[,2]
   # x_test <- data_test[,-2]
-  # formula <- make_formula(3, 0)
   # 
-  # CQuantAR3_OOS <- qCQR(formula,x0,y0,x1,y1,x_test,QQ)
-  
-  #--------------- CONFORMAL QUANTILE RANDOM FOREST
-  
-  #AR1
-  x0 <- data_1[,-c(2,4,5)]
-  y0 <- data_1[,2]
-  x1 <- data_2[,-c(2,4,5)]
-  y1 <- data_2[,2]
-  x_test <- data_test[,-c(2,4,5)]
-
-  CQuantAR1_OOS <- qCQRF(x0,y0,x1,y1,x_test,QQ)
-  
-  #AR2
-  x0 <- data_1[,-c(2,5)]
-  y0 <- data_1[,2]
-  x1 <- data_2[,-c(2,5)]
-  y1 <- data_2[,2]
-  x_test <- data_test[,-c(2,5)]
-
-  CQuantAR2_OOS <- qCQRF(x0,y0,x1,y1,x_test,QQ)
-  
-  #AR2
-  x0 <- data_1[,-2]
-  y0 <- data_1[,2]
-  x1 <- data_2[,-2]
-  y1 <- data_2[,2]
-  x_test <- data_test[,-2]
-
-  CQuantAR3_OOS <- qCQRF(x0,y0,x1,y1,x_test,QQ)
-
-  
+  # CQuantAR3_OOS <- qCQRF(x0,y0,x1,y1,x_test,QQ)
+  # 
+  # 
   #---------------- CALIBRATION OF QR AND CQR
   
   coverageQRAR1 <- compute_coverage(Y_test, QuantAR1_OOS, QQ)
@@ -195,7 +200,7 @@ run_simulation <- function(n){
 vector_n <- c(101,201,1001)
 
 n2 = 100
-n3 = 100 
+n3 = 100
 n_simul <- n3
 seeds <- 1:n_simul # Creates a vector of seeds, one for each simulation
 
@@ -366,7 +371,7 @@ p <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
   labs(title = paste("n1 =", n - 3, ", AR(2) Model"), x = "Quantile Levels", y = "Empirical Coverage") + # Add labels and title
   theme_minimal() +
   theme(
-    legend.position = "right",
+    legend.position = c(0.85, 0.15), # Position the legend at the bottom right
     legend.title = element_blank(),
     text = element_text(size = 15),
     plot.title = element_text(hjust = 0.5),
@@ -376,8 +381,7 @@ p <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
 
 # Print the plot
 print(p)
-
 # Save the plot as a PDF file
-ggsave(filename = paste0("calibration_n", n - 3, "_AR(2)_RForest.pdf"), plot = p, width = 7, height = 5)
+#ggsave(filename = paste0("Cauchy_calibration_n", n - 3, "_AR(2)_QRegression.pdf"), plot = p, width = 7, height = 5)
 }
 

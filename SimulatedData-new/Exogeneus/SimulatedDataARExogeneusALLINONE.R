@@ -22,8 +22,10 @@ library(quantregForest)
 library(openxlsx)
 source("C:/Users/Pietro/Desktop/Pietro/Politecnico/Tesi/Thesis-Code/functions.R")
 
-#file_path <- "ALLINONE_Exogenous_Results.xlsx"
-file_path <- "ALLINONE_Exogenous_Results_alpha.xlsx"
+file_path <- "ALLINONE_Exogenous_Results_normal_error.xlsx"
+
+# Check if the file exists
+if (!file.exists(file_path)) {
   # Create a new workbook
   wb <- createWorkbook()
   
@@ -32,11 +34,13 @@ file_path <- "ALLINONE_Exogenous_Results_alpha.xlsx"
   
   # Save the workbook (this creates the file)
   saveWorkbook(wb, file_path, overwrite = TRUE)
- 
- wb <- loadWorkbook(file_path)
+} else {
+  # Load the existing workbook
+  wb <- loadWorkbook(file_path)
+}
 
 
-run_simulation <- function(n,ratio_p_n,alpha){
+run_simulation <- function(n,ratio_p_n){
   
   # Set parameters
   #n <- 31      # Number of data points for training. 3 will always be lost!
@@ -60,7 +64,7 @@ run_simulation <- function(n,ratio_p_n,alpha){
   # Simulate AR(2) with exogenous variables for training data
   for (t in 3:(n + n2)) {
     Y_ar2[t] <- phi_ar2[1] * Y_ar2[t - 1] + phi_ar2[2] * Y_ar2[t - 2] +
-      sum(beta * exog_vars[t, ]) + alpha * rt(1, df = 2)
+      sum(beta * exog_vars[t, ]) + rnorm(1,mean = 0, sd =1)#rt(1, df = 2)
   }
   
   # Create lagged variables
@@ -96,10 +100,10 @@ run_simulation <- function(n,ratio_p_n,alpha){
 
    for (jq in 1:length(QQ)) {  
     
-     QR0 <- rq(make_formula(0, num_exog_vars), data = data, tau=QQ[jq])     
+     QR0 <- rq(make_formula(0, num_exog_vars), data = data, tau=QQ[jq])   
      QuantAR0_OOS[,jq] <- as.matrix(data_test[,-c(2,3,4,5)]) %*% coef(QR0)
        
-     QR1 <- rq(make_formula(1, num_exog_vars), data = data, tau=QQ[jq])     
+     QR1 <- rq(make_formula(1, num_exog_vars), data = data, tau=QQ[jq])
      QuantAR1_OOS[,jq] <- as.matrix(data_test[,-c(2,4,5)]) %*% coef(QR1)
       
      QR2 <- rq(make_formula(2, num_exog_vars), data = data, tau=QQ[jq])
@@ -267,9 +271,8 @@ run_simulation <- function(n,ratio_p_n,alpha){
 
 
 
-vector_n <- c(101,201,1001)
+vector_n <- c(101,201)
 vector_p_n <- c(0.1,0.2,0.3,0.4)
-vector_alpha <- c(1,0.1,0.01) 
 
 
 MAEQRAR2 <- c()
@@ -287,11 +290,10 @@ count <- 2 #so I leave first row empty
 
 for (n in vector_n){
   for(p_n in vector_p_n){
-    for(alpha in vector_alpha){
-      
+
 # Setup parallel cluster
 cl <- makeCluster(detectCores() - 1) # Leave one core free to avoid freezing your system
-clusterExport(cl, varlist=c("run_simulation","n","p_n","alpha")) # Export the simulation function to each cluster node
+clusterExport(cl, varlist=c("run_simulation","n","p_n")) # Export the simulation function to each cluster node
 clusterEvalQ(cl, { 
   library(readxl)
   library(quantreg)
@@ -304,7 +306,7 @@ clusterEvalQ(cl, {
 # Run simulations in parallel
 results <- parLapply(cl, seeds, function(seed) {
   set.seed(seed)
-  run_simulation(n,p_n,alpha)
+  run_simulation(n,p_n)
 })
 
 
@@ -330,7 +332,6 @@ coveragetotDCPAR2 <- matrix(NA,n3,length(QQ))
 
 index = 1
 for(res in results){
-  coveragetotQRAR0[index,] <- res[[1]]
   coveragetotQRAR1[index,] <- res[[1]]
   coveragetotQRAR2[index,] <- res[[2]]
   coveragetotQRAR3[index,] <- res[[3]]
@@ -389,14 +390,14 @@ wb <- loadWorkbook(file_path)
 sheet <- "Data"
 
 #In the first column, write the parameters of the simulation:
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", QR AR(1)" ), startCol = 1, startRow = count, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", CQR AR(1)" ), startCol = 1, startRow = count+1, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", QR AR(2)" ), startCol = 1, startRow = count+2, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", CQR AR(2)" ), startCol = 1, startRow = count+3, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", QR AR(3)" ), startCol = 1, startRow = count+4, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", CQR AR(3)" ), startCol = 1, startRow = count+5, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", QR AR(0)" ), startCol = 1, startRow = count+6, colNames = FALSE)
-writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n,  ", alpha = ", alpha, ", CQR AR(0)" ), startCol = 1, startRow = count+7, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", QR AR(1)" ), startCol = 1, startRow = count, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", CQR AR(1)" ), startCol = 1, startRow = count+1, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", QR AR(2)" ), startCol = 1, startRow = count+2, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", CQR AR(2)" ), startCol = 1, startRow = count+3, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", QR AR(3)" ), startCol = 1, startRow = count+4, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", CQR AR(3)" ), startCol = 1, startRow = count+5, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", QR AR(0)" ), startCol = 1, startRow = count+6, colNames = FALSE)
+writeData(wb, sheet = sheet, x = paste("n1 = ", n-3,", p/n = ", p_n, ", CQR AR(0)" ), startCol = 1, startRow = count+7, colNames = FALSE)
 
 #In the 2°,3°,4° columns, put how many inside, below and above CI
 writeData(wb, sheet = sheet, x = sum(resultsPitSTQRAR1$IsWithinCI) , startCol = 2, startRow = count, colNames = FALSE)
@@ -495,7 +496,7 @@ count <- count + 9 #lascio una riga vuota
   
   
   # Create the plot
-  plot(x1, y1, type = "n", xlab = "Quantile", ylab = "Empirical Coverage", main = paste("n1 = ", n-3, "p/n = ", p_n, "alpha = ", alpha))
+  plot(x1, y1, type = "n", xlab = "Quantile", ylab = "Empirical Coverage", main = paste("n1 = ", n-3, "p/n = ", p_n))
   
   # Add the staircase lines for the first dataset
   for (i in 2:length(x1)) {
@@ -529,7 +530,7 @@ MAECQRAR2 <- c(MAECQRAR2,mean(abs(resultsPitSTCQRAR2$Quantile-resultsPitSTCQRAR2
 
   }
   }
-}
+
 # Calculate the difference between the two vectors
 difference <- MAEQRAR2 - MAECQRAR2
 
