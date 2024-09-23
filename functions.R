@@ -167,6 +167,10 @@ qCQR_opposite <- function(formula,x0,y0,x1,y1,x_test,QQ) {
 
 qCQRF_opposite <- function(x0,y0,x1,y1,x_test,QQ) {
   
+  x0 <- as.matrix(x0)
+  x1 <- as.matrix(x1)
+  x_test <- as.matrix(x_test)
+  
   qrf_model <- quantregForest(x = x0, y = y0)
   CQuant_OOS <- matrix(0, nrow(x_test), length(QQ))
   Q_low <- matrix(NA, nrow(x1), length(QQ))
@@ -174,7 +178,7 @@ qCQRF_opposite <- function(x0,y0,x1,y1,x_test,QQ) {
   
   for( jq in 1:length(QQ) ) {
     
-    Q_low[1:nrow(x1), jq] <- predict(qrf_model, newdata = x1, what = (1-QQ[jq]))
+    Q_low[1:nrow(x1), jq] <- predict(qrf_model, newdata = as.matrix(x1), what = (1-QQ[jq]))
     
     Q_high[1 : nrow(x1), jq] <- Inf
     
@@ -406,12 +410,9 @@ remove_highly_correlated <- function(data, threshold = 0.99) {
   return(list(cleaned_data = cleaned_data, removed_indices = removed_indices))
 }
 
-calculate_percent_below <- function(PitST_OOSC) {
+calculate_percent_below <- function(PitST_OOSC,levels) {
   # Remove NA values from the vector
   PitST_OOSC <- na.omit(PitST_OOSC)
-  
-  # Define the levels (0.01, 0.02, ..., 1)
-  levels <- seq(0.01, 1, by = 0.01)
   
   # Initialize a vector to store the results
   percent_below <- numeric(length(levels))

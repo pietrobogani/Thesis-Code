@@ -10,7 +10,7 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 
-h <- 4
+h <- 1
 
 # Load data 
 file_path <- "DataVulnerabilityAppendix.xls"
@@ -193,8 +193,8 @@ legend("topleft",
 
 ```{r}
 
-coverageC <- calculate_percent_below(PitST_OOSC)/100
-coverage <- calculate_percent_below(PitST_OOSNS)/100
+coverageC <- calculate_percent_below(PitST_OOSC,QQC)/100
+coverage <- calculate_percent_below(PitST_OOSNS,QQ)/100
 n <- length(na.omit(PitST_OOSC))
 resultsC <- compute_results(coverageC, n, QQC)
 results <- compute_results(coverage, n, QQ)

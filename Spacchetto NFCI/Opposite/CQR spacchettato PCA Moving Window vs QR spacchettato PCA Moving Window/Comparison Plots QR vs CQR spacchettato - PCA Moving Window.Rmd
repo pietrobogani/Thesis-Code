@@ -1,0 +1,342 @@
+```{r}
+#Three different cases with Moving Window equal to 1/2 of the total length (MW1), 1/4 of the total length (MW2) or 1/6 of the total length (MW3).
+#To run MW2 and MW3, just substitute over the whole script "MW1" with "MW2" or "MW3"
+
+library(quantreg)
+library(lubridate)
+library(pracma)
+library(readxl)
+library(sn)
+library(parallel)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+h <- 4
+
+# Load data 
+file_path <- "DataVulnerabilityAppendix.xls"
+source("C:/Users/Pietro/Desktop/Pietro/Politecnico/Tesi/Thesis-Code/functions.R")
+
+
+# Read the file
+data <- read_excel(file_path)
+data<-data[,1:3]
+
+# Filter data for 1973Q1-2015Q4
+colnames(data)[1] <- "Time"
+data$Time <- as.Date(data$Time)
+
+
+# Subset the data
+data <- data[data$Time >= as.Date("1973-01-01") & data$Time <= as.Date("2015-10-01"), ]
+X <- data[,2:3]
+Time <- data$Time
+
+
+# Set forecast settings
+#QQ <- seq(0.05, 0.95, by = 0.05)
+QQ <-  seq(0.01, 0.99, by = 0.01)
+QQC <-  seq(0.01, 0.99, by = 0.01)
+#QQ <- seq(0.01, 0.99, by = 0.01) #Let's try a much more fine grid 
+#QQ <- c(0.01, QQ, 0.99)
+deltaYY <- 0.1
+YY <- seq(-20, 20, by = deltaYY)
+jtFirstOOS <- which(year(data$Time) == 1993 & month(data$Time) == 1)
+indices <- which(QQ %in% c(0.05, 0.25, 0.5, 0.75, 0.95))
+jq05 <- indices[1]
+jq25 <- indices[2]
+jq50 <- indices[3]
+jq75 <- 16 #couldn't automatically translate from MATLAB, I set it manually, no idea why
+jq95 <- indices[4]
+
+# Construct average growth rates
+y <- X$A191RL1Q225SBEA
+Yh <- matrix(0, nrow=length(y), ncol=4)
+
+
+Yh <- stats::filter(y, rep(1/h, h), sides=1) #If h = 1, y = Yh
+if (h>1){
+  Yh[1:(h-1)] <- NA
+}
+```
+
+
+```{r}
+#  LOAD DATA FOR THE CONFORMAL CASE
+
+filename <- paste("ResOOSCspacchettoPCA_MW3_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+```
+
+
+
+```{r}
+#  LOAD DATA FOR THE CASE WITH SMOOTHING (ORIGINAL)
+
+filename <- paste("ResOOSN_MW3_H", h, ".RData", sep="")
+cat(paste("Loading results from file", filename, "\n"))
+
+load(filename)
+
+```
+
+
+
+```{r}
+#  COMPARE IN SAMPLE AND UNCONDITIONAL (conformal vs standard). THIS IS A EASY WAY TO TEST THE GOODNESS OF MY IMPLEMENTATION OF qst, dst, and pst
+
+qqTargC <- YQunc_ISC[nrow(YQunc_ISC), ]
+qqTargNS <- YQunc_ISNS[nrow(YQunc_ISNS), ]
+
+densitiespC <- PSTunc_ISC[h+1, ]         #dst function
+densitiespNS <- PSTunc_ISNS[h+1, ]
+plot(YY,densitiespC, xlab = 'grid', ylab='density')
+points(YY,densitiespNS, col = 'red')
+
+densitiesqC <- QSTunc_ISC[h+1, ]         #qst function
+densitiesqNS <- QSTunc_ISNS[h+1, ]
+plot(QQC,densitiesqC, xlab = 'grid', ylab='empirical quantiles',)
+points(QQ,densitiesqNS, col = 'red')
+
+densitiescC <- CSTunc_ISC[h+1, ]          #pst function
+densitiescNS <- CSTunc_ISNS[h+1, ]
+plot(YY,densitiescC, xlab = 'grid', ylab='empirical cumulative',)
+points(YY,densitiescNS, col = 'red')
+
+
+plot(Yh[(h + 1):length(Yh)],ScoreSTunc_ISC[(h + 1):length(Yh)], xlab = 'real observations', ylab = 'density')   # dst function
+points(Yh[(h + 1):length(Yh)],ScoreSTunc_ISNS[(h + 1):length(Yh)], col = 'red')
+
+
+
+```
+```{r}
+#  NOW I COMPARE OUT-OF-SAMPLE FOR A RANDOM YEAR
+
+
+jt <- 100 #higher than 81 if I want to test the OOS, OTHERWISE IS FULL ON NA
+
+qqTargC <- YQ_OOSC[jt + h, ]
+qqTargNS <- YQ_OOSNS[jt + h, ]
+
+densitiespC <- PST_OOSC[jt+h, ]         #dst function
+densitiespNS <- PST_OOSNS[jt+h, ]
+plot(YY,densitiespC, xlab = 'grid', ylab='density')
+points(YY, densitiespNS, col = 'red')
+
+densitiesqC <- QST_OOSC[jt+h, ]         #qst function
+densitiesqNS <- QST_OOSNS[jt+h, ]
+plot(QQC,densitiesqC, xlab = 'quantile levels', ylab='empirical quantiles',)
+points(QQ,densitiesqNS, col = 'red')
+
+densitiescC <- CST_OOSC[jt+h, ]          #pst function
+densitiescNS <- CST_OOSNS[jt+h, ]
+plot(YY,densitiescC, xlab = 'grid', ylab='empirical cumulative',)
+points(YY,densitiescNS, col = 'red')
+
+```
+
+```{r}
+# PLOT DOWNSIDE ENTROPY
+
+plot(Time, LeftEntropy_OOSC, type = 'l', col = '#0000FF', 
+     xlab = 'Time', ylab = 'Entropy', xlim = range(Time), ylim = c(-0.2,1.1),
+     main = "Comparison of Entropies Over Time", lwd = 2)
+#lines(Time, LeftEntropy_OOSNS, type = 'l', col = '#008000',  lwd = 2) 
+legend("topleft", 
+       legend = c("LeftEntropy_OOSC", "LeftEntropy_OOS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+       
+
+
+
+plot(Time, LeftEntropy_ISC, type = 'l', col = '#0000FF',
+     xlab = 'Time', ylab = 'Entropy', xlim = range(Time), ylim = c(-0.2,1.3),
+     main = "Comparison of Entropies Over Time", lwd = 2)
+#lines(Time, LeftEntropy_ISNS, type = 'l', col = '#008000', lwd = 2) 
+legend("topleft", 
+       legend = c("LeftEntropy_ISC", "LeftEntropy_IS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+```
+```{r}
+# PLOT OUT OF SAMPLE ACCURACY
+
+
+plot(Time, ScoreST_OOSC, type = 'l', col = '#0000FF', 
+     xlab = 'Time', ylab = 'Accuracy', xlim = range(Time), 
+     main = "Comparison of Accuracies Over Time", lwd = 2)
+lines(Time, ScoreST_OOSNS, type = 'l', col = '#008000',  lwd = 2) 
+legend("topleft", 
+       legend = c("ScoreST_OOSC", "ScoreST_OOS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+       
+
+
+
+plot(Time, ScoreST_ISC, type = 'l', col = '#0000FF', 
+     xlab = 'Time', ylab = 'Accuracies', xlim = range(Time),
+     main = "Comparison of Accuracies Over Time", lwd = 2)
+lines(Time, ScoreST_ISNS, type = 'l', col = '#008000',  lwd = 2) 
+legend("topleft", 
+       legend = c("ScoreST_ISC", "ScoreST_IS"), 
+       col = c('#0000FF', '#008000'),
+       lty = c(1, 1),  
+       lwd = c(2, 2))  
+```
+
+```{r}
+
+coverageC <- calculate_percent_below(PitST_OOSC)/100
+coverage <- calculate_percent_below(PitST_OOSNS)/100
+n <- length(na.omit(PitST_OOSC))
+resultsC <- compute_results(coverageC, n, QQC)
+results <- compute_results(coverage, n, QQ)
+
+MAEC <-  mean(abs(resultsC$Quantile-resultsC$EmpiricalCoverage))
+MAEC
+
+MAE <-  mean(abs(results$Quantile-results$EmpiricalCoverage))
+MAE
+```
+
+```{r}
+PITtest_env <- new.env()
+source("PITtest.r",local = PITtest_env)
+rvec <- seq(0.001, 1, by = 0.001)
+# if (h == 1) {
+#   kappa <- 1.34
+#   kappaGDPonly <- 1.34
+#   P <- sum(!is.na(PitST_OOSC)) # correct for both h = 1 and h = 4
+# } else if (h == 4) {
+#   # Compute bootstrapped 5% critical values
+#   PITs <- cbind(PitST_OOSC, PitSTGDPonly_OOSC)
+#   PITs <- PITs[(jtFirstOOS + h):nrow(PITs), , drop = FALSE]
+#   
+#   #testcritvalues <- matrix(NA, nrow = 1, ncol = 2, dimnames = list(NULL, c('GDP and NFCI', 'GDP only')))
+#   testcritvalues <- array(NA, dim = c(2, 3, 2))
+#   
+#   for (i in 1:2) {
+#     testcritvalues[,, i] <- round(rstestboot_env$rstestboot(PITs[, i])$critvalues[2] * 100) / 100
+#   }
+#   
+#   kappa <- testcritvalues[1, 2, 1] #different from Matlab due to seed in CVfinalbootstrapInoue
+#   kappaGDPonly <- testcritvalues[1, 2, 2] #different from Matlab due to seed in CVfinalbootstrapInoue
+# }
+  # # Create the data frame for the dashed lines
+  # dashed_lines <- data.frame(
+  #   tau = rvec,
+  #   lower = rvec - (kappa / sqrt(P)),
+  #   upper = rvec + (kappa / sqrt(P))
+  # )
+
+
+zST_ecdfC <- PITtest_env$PITtest(PitST_OOSC, rvec)
+zSTGDPonly_ecdfC <- PITtest_env$PITtest(PitSTGDPonly_OOSC, rvec)
+
+zST_ecdfNS <- PITtest_env$PITtest(PitST_OOSNS, rvec)
+zSTGDPonly_ecdfNS <- PITtest_env$PITtest(PitSTGDPonly_OOSNS, rvec)
+
+
+# Assuming rvec, zST_ecdfC, zST_ecdfNS, zSTGDPonly_ecdfNS, zSTGDPonly_ecdfC are vectors of the same length
+data1 <- data.frame(
+  tau = rvec,
+  CQR = zST_ecdfC,
+  QR = zST_ecdfNS
+)
+
+data2 <- data.frame(
+  tau = rvec,
+  CQRonlyGDP = zSTGDPonly_ecdfC,
+  QRonlyGDP = zSTGDPonly_ecdfNS
+)
+
+df1 <- data.frame(
+  Quantile = data1$tau,
+  EmpiricalCoverage = data1$CQR,
+  Group = "CQR QR NFCI's components PCA MW3"
+)
+
+df2 <- data.frame(
+  Quantile = data1$tau,
+  EmpiricalCoverage = data1$QR,
+  Group = "QR NFCI's components PCA MW3"
+)
+
+# Combine the data frames
+df <- bind_rows(df1, df2)
+
+# Define the colors
+pitc_colors <- "#0000FF"  # Blue
+pit_colors <- "#FF0000"   # Red
+
+# Create the first plot with adjusted line width and legend position
+plot1 <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
+  geom_step(direction = "vh", linewidth = 1) + # Use thinner `linewidth` for lines
+  geom_point(size = 0.5) + # Adjust point size
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black", linewidth = 1) + # Dashed diagonal line
+  scale_color_manual(values = c("CQR QR NFCI's components PCA MW3" = pitc_colors, "QR NFCI's components PCA MW3" = pit_colors)) + # Color scale
+  labs(title = paste("h =", h), x = "Quantile Levels", y = "Empirical Coverage") + # Labels and title
+  theme_minimal() +
+  theme(
+    legend.position = c(0.75, 0.15), # Adjust legend position to top-right
+    legend.title = element_blank(),
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5)
+  )
+
+# Print and save the first plot
+print(plot1)
+ggsave(filename = paste0("fulloppositeQRvsCQRspacchettatoPCA_MW3_", h, ".pdf"), plot = plot1, width = 7, height = 5)
+
+
+# Second plot (PITGDPonlyC vs PITGDPonly)
+df3 <- data.frame(
+  Quantile = data2$tau,
+  EmpiricalCoverage = data2$CQRonlyGDP,
+  Group = "PITGDPonlyC"
+)
+
+df4 <- data.frame(
+  Quantile = data2$tau,
+  EmpiricalCoverage = data2$QRonlyGDP,
+  Group = "PITGDPonly"
+)
+
+# Combine the data frames
+df_combined <- bind_rows(df3, df4)
+
+# Define the colors
+pitgdp_colors <- "#0000FF"  # Blue
+pitgdp_only_colors <- "#FF0000"   # Red
+
+# Create the second plot with adjusted line width and legend position
+plot2 <- ggplot(df_combined, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
+  geom_step(direction = "vh", linewidth = 0.75) + # Use thinner `linewidth` for lines
+  geom_point(size = 2) + # Adjust point size
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black", linewidth = 0.75) + # Dashed diagonal line
+  scale_color_manual(values = c("PITGDPonlyC" = pitgdp_colors, "PITGDPonly" = pitgdp_only_colors)) + # Color scale
+  labs(title = paste("h =", h), x = "Quantile Levels", y = "Empirical Coverage") + # Labels and title
+  theme_minimal() +
+  theme(
+    legend.position = c(0.75, 0.15), # Adjust legend position to top-right
+    legend.title = element_blank(),
+    text = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5)
+  )
+
+# Print and save the second plot
+print(plot2)
+```

@@ -1,7 +1,7 @@
 
 #Code updated to have 100 steps ahead in the test set and to produce also plots
 #random forest missing for now
-
+#normal error
 
 library(caret)
 library(sn)
@@ -54,7 +54,7 @@ run_simulation <- function(n, phi_ar2){
   Y <- numeric(n+n2)
   Y[1] <- rnorm(1)
   for (i in 2:(n+n2)) {
-    Y[i] <- phi_ar2 * Y[i-1] + rt(n = 1, df = 2) #heavy tails
+    Y[i] <- phi_ar2 * Y[i-1] + rnorm(1) #rt(n = 1, df = 2) #heavy tails
   }
   # Create lagged variables
   Y_lag1 <- c(NA, Y[-length(Y)])

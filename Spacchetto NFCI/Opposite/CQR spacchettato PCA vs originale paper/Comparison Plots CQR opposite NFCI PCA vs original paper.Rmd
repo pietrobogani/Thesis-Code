@@ -77,7 +77,11 @@ load(filename)
 
 ```
 
-
+```{r}
+TimeOOS <- Time[(1+sum(is.na(YQ_OOS[,1]))):length(Time)]
+plot(TimeOOS, YQ_OOS[, jq05][!is.na(YQ_OOS[, jq05])], type = 'l', col = 'blue', xlab = 'Time', ylab = 'Quantiles', xlim = range(Time), ylim = c(-20,20))
+lines(TimeOOS, YQ_OOSC[, jq05][!is.na(YQ_OOSC[, jq05])], type = 'l', col = 'blue', lty = 2)
+```
 
 ```{r}
 #  COMPARE IN SAMPLE AND UNCONDITIONAL. THIS IS A EASY WAY TO TEST THE GOODNESS OF MY IMPLEMENTATION OF qst, dst, and pst
@@ -189,8 +193,8 @@ legend("topleft",
 ```
 ```{r}
 
-coverageC <- calculate_percent_below(PitST_OOSC)/100
-coverage <- calculate_percent_below(PitST_OOS)/100
+coverageC <- calculate_percent_below(PitST_OOSC,QQC)/100
+coverage <- calculate_percent_below(PitST_OOS,QQ)/100
 n <- length(na.omit(PitST_OOSC))
 resultsC <- compute_results(coverageC, n, QQC)
 results <- compute_results(coverage, n, QQ)
@@ -243,7 +247,7 @@ df1 <- data.frame(
 df2 <- data.frame(
   Quantile = data3$tau,
   EmpiricalCoverage = data3$PIT,
-  Group = "NFCI Original"
+  Group = "NFCI Adrian et al."
 )
 
 # Combine the data frames
@@ -258,7 +262,7 @@ plot1 <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
   geom_step(direction = "vh", linewidth = 1) + # Use thinner `linewidth` for lines
   geom_point(size = 0.5) + # Adjust point size
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black", linewidth = 1) + # Dashed diagonal line
-  scale_color_manual(values = c("CQR QR NFCI's Components PCA" = pitc_colors, "NFCI Original" = pit_colors)) + # Color scale
+  scale_color_manual(values = c("CQR QR NFCI's Components PCA" = pitc_colors, "NFCI Adrian et al." = pit_colors)) + # Color scale
   labs(title = paste("h =", h), x = "Quantile Levels", y = "Empirical Coverage") + # Labels and title
   theme_minimal() +
   theme(

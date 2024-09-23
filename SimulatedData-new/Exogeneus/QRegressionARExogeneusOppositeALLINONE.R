@@ -21,7 +21,7 @@ library(openxlsx)
 source("C:/Users/Pietro/Desktop/Pietro/Politecnico/Tesi/Thesis-Code/functions.R")
 
 #file_path <- "ALLINONE_Exogenous_Results_Opposite.xlsx"
-file_path <- "ALLINONE_Exogenous_Results_Oppositetemp.xlsx"
+file_path <- "ALLINONE_Exogenous_Results_OppositetePOIBUTTOVIA.xlsx"
 
 
 
@@ -204,8 +204,8 @@ run_simulation <- function(n,ratio_p_n,alpha){
 
 
 
-vector_n <- c(101,201,1001)
-vector_p_n <- c(0.1,0.2,0.3,0.4)
+vector_n <- c(201)
+vector_p_n <- c(0.1)
 vector_alpha <- c(1) 
 
 
@@ -424,57 +424,57 @@ saveWorkbook(wb, file_path, overwrite = TRUE)
 
 count <- count + 9 #lascio una riga vuota
 
-
-#------------- PLOT CALIBRATION CURVES OF QR and CQR for AR(2) MODEL
-# Create data frames for both datasets
-{
-df1 <- data.frame(
-  Quantile = rev(resultsPitSTCQRAR2$Quantile),
-  EmpiricalCoverage = rev(resultsPitSTCQRAR2$EmpiricalCoverage),
-  Group = "CQR QR"
-)
-
-df2 <- data.frame(
-  Quantile = rev(resultsPitSTQRAR2$Quantile),
-  EmpiricalCoverage = rev(resultsPitSTQRAR2$EmpiricalCoverage),
-  Group = "QR"
-)
-
-# Combine the data frames
-df <- bind_rows(df1, df2)
-
-# Define the colors
-cqr_colors <- "#0000FF"
-qr_colors <- "#FF0000"
-
-# Define the legend position based on the value of n - 3
-legend_position <- if ((n - 3 == 98) || (n - 3 == 998 && p_n == 0.1)) {
-  c(0.85, 0.15)
-} else {
-  "none"
-}
-
-p <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
-  geom_step(direction = "vh", linewidth = 1) + # Use `linewidth` instead of `size` for lines
-  geom_point(size = 3) + # Add points
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black", linewidth = 1) + # Use `linewidth` for the diagonal line
-  scale_color_manual(values = c("CQR QR" = cqr_colors, "QR" = qr_colors)) + # Manual color scale
-  labs(title = paste("n1 =", n - 3, "p/n =", p_n), x = "Quantile Levels", y = "Empirical Coverage") + # Add labels and title
-  theme_minimal() +
-  theme(
-    legend.position = legend_position, # Set legend position based on condition
-    legend.title = element_blank(),
-    text = element_text(size = 15),
-    plot.title = element_text(hjust = 0.5),
-    axis.title.x = element_text(hjust = 0.5),
-    axis.title.y = element_text(hjust = 0.5)
-  )
-
-# Print the plot
-print(p)
+# 
+# #------------- PLOT CALIBRATION CURVES OF QR and CQR for AR(2) MODEL
+# # Create data frames for both datasets
+# {
+# df1 <- data.frame(
+#   Quantile = rev(resultsPitSTCQRAR2$Quantile),
+#   EmpiricalCoverage = rev(resultsPitSTCQRAR2$EmpiricalCoverage),
+#   Group = "CQR QR"
+# )
+# 
+# df2 <- data.frame(
+#   Quantile = rev(resultsPitSTQRAR2$Quantile),
+#   EmpiricalCoverage = rev(resultsPitSTQRAR2$EmpiricalCoverage),
+#   Group = "QR"
+# )
+# 
+# # Combine the data frames
+# df <- bind_rows(df1, df2)
+# 
+# # Define the colors
+# cqr_colors <- "#0000FF"
+# qr_colors <- "#FF0000"
+# 
+# # Define the legend position based on the value of n - 3
+# legend_position <- if ((n - 3 == 98) || (n - 3 == 998 && p_n == 0.1)) {
+#   c(0.85, 0.15)
+# } else {
+#   "none"
+# }
+# 
+# p <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
+#   geom_step(direction = "vh", linewidth = 1) + # Use `linewidth` instead of `size` for lines
+#   geom_point(size = 3) + # Add points
+#   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black", linewidth = 1) + # Use `linewidth` for the diagonal line
+#   scale_color_manual(values = c("CQR QR" = cqr_colors, "QR" = qr_colors)) + # Manual color scale
+#   labs(title = paste("n1 =", n - 3, "p/n =", p_n), x = "Quantile Levels", y = "Empirical Coverage") + # Add labels and title
+#   theme_minimal() +
+#   theme(
+#     legend.position = legend_position, # Set legend position based on condition
+#     legend.title = element_blank(),
+#     text = element_text(size = 15),
+#     plot.title = element_text(hjust = 0.5),
+#     axis.title.x = element_text(hjust = 0.5),
+#     axis.title.y = element_text(hjust = 0.5)
+#   )
+# 
+# # Print the plot
+# print(p)
 # Save the plot as a PDF file
 #ggsave(filename = paste0("Exogeneus_calibration_n", n - 3,"_", p_n, "_AR(2).pdf"), plot = p, width = 7, height = 5)
-}
+#}
 
 MAEQRAR2 <- c(MAEQRAR2,mean(abs(resultsPitSTQRAR2$Quantile-resultsPitSTQRAR2$EmpiricalCoverage)))
 MAECQRAR2 <- c(MAECQRAR2,mean(abs(resultsPitSTCQRAR2$Quantile-resultsPitSTCQRAR2$EmpiricalCoverage)))
@@ -488,26 +488,75 @@ MAECQRAR2 <- c(MAECQRAR2,mean(abs(resultsPitSTCQRAR2$Quantile-resultsPitSTCQRAR2
 
 
 
-# Calculate the difference between the two vectors
-difference <- MAEQRAR2 - MAECQRAR2
 
-# Create a data frame
-df <- data.frame(
-  x = vector_n,
-  MAEQRAR2 = MAEQRAR2,
-  MAECQRAR2 = MAECQRAR2,
-  Difference = difference
+
+
+
+df1 <- data.frame(
+  Quantile = rev(resultsPitSTCQRAR2$Quantile),
+  EmpiricalCoverage = rev(resultsPitSTCQRAR2$EmpiricalCoverage),
+  Group = "CQR QR 0.4"
 )
 
-ggplot(df) +
-  geom_point(aes(x = x, y = MAEQRAR2), color = "blue") +
-  geom_line(aes(x = x, y = MAEQRAR2), color = "blue", linetype = "dashed") +
-  geom_point(aes(x = x, y = MAECQRAR2), color = "red") +
-  geom_line(aes(x = x, y = MAECQRAR2), color = "red", linetype = "solid") +
-  geom_point(aes(x = x, y = Difference), color = "green") +
-  geom_line(aes(x = x, y = Difference), color = "green", linetype = "dotted") +
-  scale_x_reverse() +
-  labs(title = "Plot of MAEQR, MAECQR, and Their Difference",
-       x = "Numbers of observations",
-       y = "MAE") +
-  theme_minimal()
+df2 <- data.frame(
+  Quantile = rev(resultsPitSTQRAR2$Quantile),
+  EmpiricalCoverage = rev(resultsPitSTQRAR2$EmpiricalCoverage),
+  Group = "QR 0.1"
+)
+
+df3 <- data.frame(
+  Quantile = rev(resultsPitSTQRAR2$Quantile),
+  EmpiricalCoverage = rev(resultsPitSTQRAR2$EmpiricalCoverage),
+  Group = "QR 0.2"
+)
+
+df4 <- data.frame(
+  Quantile = rev(resultsPitSTQRAR2$Quantile),
+  EmpiricalCoverage = rev(resultsPitSTQRAR2$EmpiricalCoverage),
+  Group = "QR 0.3"
+)
+
+df5 <- data.frame(
+  Quantile = rev(resultsPitSTQRAR2$Quantile),
+  EmpiricalCoverage = rev(resultsPitSTQRAR2$EmpiricalCoverage),
+  Group = "QR 0.4"
+)
+
+# Combine all data frames
+df <- bind_rows(df1, df2, df3, df4, df5)
+
+# Define the colors
+cqr_colors <- "#0000FF"
+qr_colors <- c("#FFCCCC", "#FF9999", "#FF6666", "#FF3333") # Different shades for QR groups
+
+# Define the legend position based on the value of n
+n <- 201 # Example value for 'n', adjust as per your context
+p_n <- c(0.1, 0.2, 0.3, 0.4) # Example values for 'p/n', adjust as per your context
+
+legend_position <- c(0.85, 0.25)
+
+# Generate the plot
+p <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
+  geom_step(direction = "vh", linewidth = 1) + # Use `linewidth` instead of `size` for lines
+  geom_point(size = 3) + # Add points
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black", linewidth = 1) + # Use `linewidth` for the diagonal line
+  scale_color_manual(values = c("CQR QR 0.4" = cqr_colors, 
+                                "QR 0.1" = qr_colors[1], 
+                                "QR 0.2" = qr_colors[2], 
+                                "QR 0.3" = qr_colors[3], 
+                                "QR 0.4" = qr_colors[4])) + # Manual color scale
+  labs(title = paste("n1 =", n - 3, "p/n =", toString(p_n)), x = "Quantile", y = "Empirical Coverage") + # Add labels and title
+  theme_minimal() +
+  theme(
+    legend.position = legend_position, # Set legend position based on condition
+    legend.title = element_blank(),
+    text = element_text(size = 15),
+    plot.title = element_text(size = 15, hjust = 0.5),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5)
+  )
+
+# Print the plot
+print(p)
+
+ggsave(filename = paste0("PlotSfumatoFinale.pdf"), plot = p, width = 7, height = 5)

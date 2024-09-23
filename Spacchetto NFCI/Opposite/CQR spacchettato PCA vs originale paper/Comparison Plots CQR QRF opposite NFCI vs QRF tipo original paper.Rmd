@@ -60,7 +60,7 @@ if (h>1){
 ```{r}
 #  LOAD DATA FOR THE CONFORMAL CASE
 
-filename <- paste("ResOOSCQRFspacchetto_H", h, ".RData", sep="")
+filename <- paste("ResOOSCQRFspacchettoPCA_H", h, ".RData", sep="")
 cat(paste("Loading results from file", filename, "\n"))
 
 load(filename)
@@ -191,8 +191,8 @@ legend("topleft",
 
 ```{r}
 
-coverageC <- calculate_percent_below(PitST_OOSC)/100
-coverage <- calculate_percent_below(PitST_OOS)/100
+coverageC <- calculate_percent_below(PitST_OOSC,QQC)/100
+coverage <- calculate_percent_below(PitST_OOSQRF,QQ)/100
 n <- length(na.omit(PitST_OOSC))
 resultsC <- compute_results(coverageC, n, QQC)
 results <- compute_results(coverage, n, QQ)
@@ -273,7 +273,7 @@ plot1 <- ggplot(df, aes(x = Quantile, y = EmpiricalCoverage, color = Group)) +
 
 # Print and save the first plot
 print(plot1)
-ggsave(filename = paste0("fulloppositespacchettatovsOriginal", h, ".pdf"), plot = plot1, width = 7, height = 5)
+#ggsave(filename = paste0("fulloppositespacchettatovsOriginal", h, ".pdf"), plot = plot1, width = 7, height = 5)
 
 
 # Second plot (PITGDPonlyC vs PITGDPonly)
